@@ -1,21 +1,12 @@
-# React + TypeScript + Vite + shadcn/ui
+# 3m
 
-This is a template for a new Vite project with React, TypeScript, and shadcn/ui.
+Klikací fakturační nástroj pro tvorbu dokladů z ceníku prací, tisk do PDF a ukládání faktur do Supabase.
 
-## Adding components
-
-To add components to your app, run the following command:
+## Vývoj
 
 ```bash
-npx shadcn@latest add button
+bun install
+bun run dev
 ```
 
-This will place the ui components in the `src/components` directory.
-
-## Using components
-
-To use the components in your app, import them as follows:
-
-```tsx
-import { Button } from "@/components/ui/button"
-```
+Lokální env proměnné jsou v `.env.local`; vzor je v `.env.example`.
