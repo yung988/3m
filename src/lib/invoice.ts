@@ -89,6 +89,18 @@ export function formatDateTime(dateInput: string) {
   }).format(new Date(dateInput))
 }
 
+export function buildInvoicePdfFileName(draft: InvoiceDraft) {
+  const location =
+    draft.projectSubtitle || draft.projectTitle || draft.customerName
+  const parts = [
+    draft.issueDate,
+    `faktura-${draft.invoiceNumber}`,
+    location,
+  ].map(toSafeFileNamePart)
+
+  return `${parts.filter(Boolean).join("_") || "faktura"}.pdf`
+}
+
 export function formatQuantity(quantity: number, unitLabel: string) {
   const amount = numberFormatter.format(quantity)
 
@@ -181,4 +193,14 @@ function createId() {
 
 function sanitizeQrValue(value: string) {
   return value.replaceAll("*", " ").replace(/\s+/g, " ").trim().slice(0, 60)
+}
+
+function toSafeFileNamePart(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("cs-CZ")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80)
 }

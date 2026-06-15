@@ -65,6 +65,7 @@ import { priceCategories, priceList, type PriceItem } from "@/data/price-list"
 import {
   buildPaymentQrString,
   calculateTotal,
+  buildInvoicePdfFileName,
   createDefaultDraft,
   createEmptyLine,
   createLineFromPriceItem,
@@ -128,6 +129,7 @@ function App() {
   const total = useMemo(() => calculateTotal(draft.lines), [draft.lines])
   const user = session?.user ?? null
   const databaseIsConfigured = supabase !== null
+  const exportFileName = useMemo(() => buildInvoicePdfFileName(draft), [draft])
   const paymentQrString = useMemo(
     () => buildPaymentQrString(draft, total),
     [draft, total]
@@ -472,7 +474,7 @@ function App() {
       setMessage({
         title: "Zkontroluj náhled",
         description:
-          "Faktura je teď zobrazená vedle editoru. Pokud sedí, klikni znovu na Export / PDF.",
+          "Faktura je teď zobrazená přes celou obrazovku. Pokud sedí, klikni v náhledu na Export / PDF.",
       })
       return
     }
@@ -483,7 +485,7 @@ function App() {
         description:
           "Tisk se spustí, ale stav exportu se uloží až u přihlášené a uložené faktury.",
       })
-      window.print()
+      printInvoicePdf(draft)
       return
     }
 
@@ -495,9 +497,9 @@ function App() {
       await refreshSavedInvoices()
       setMessage({
         title: "Faktura označena jako exportovaná",
-        description: `Doklad ${exportedDraft.invoiceNumber} má uložený čas exportu.`,
+        description: `Doklad ${exportedDraft.invoiceNumber} má uložený čas exportu. Název PDF: ${buildInvoicePdfFileName(exportedDraft)}`,
       })
-      window.print()
+      printInvoicePdf(exportedDraft)
     } catch (error) {
       showError("Export faktury selhal", error)
     } finally {
@@ -627,13 +629,7 @@ function App() {
 
   return (
     <AppShell actions={editorActions} userEmail={user.email}>
-      <main
-        className={
-          previewVisible
-            ? "mx-auto grid max-w-[1800px] grid-cols-1 gap-4 p-4 lg:grid-cols-[minmax(300px,360px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(320px,380px)_minmax(560px,1fr)_minmax(520px,680px)]"
-            : "mx-auto grid max-w-[1400px] grid-cols-1 gap-4 p-4 lg:grid-cols-[minmax(300px,360px)_minmax(0,1fr)]"
-        }
-      >
+      <main className="mx-auto grid max-w-[1400px] grid-cols-1 gap-4 p-4 lg:grid-cols-[minmax(300px,360px)_minmax(0,1fr)]">
         <div className="no-print flex h-fit flex-col gap-4 lg:sticky lg:top-24">
           <Card>
             <CardHeader>
@@ -855,6 +851,9 @@ function App() {
                     ? `Exportováno ${formatDateTime(draft.exportedAt)}`
                     : "Neexportováno"}
                 </p>
+                <p className="mt-1 truncate text-xs text-muted-foreground">
+                  {exportFileName}
+                </p>
               </div>
             </div>
 
@@ -1014,17 +1013,18 @@ function App() {
             </div>
           </CardContent>
         </Card>
-
-        {previewVisible ? (
-          <section className="invoice-stage lg:col-span-2 2xl:col-span-1">
-            <InvoiceDocument
-              draft={draft}
-              qrDataUrl={qrDataUrl}
-              total={total}
-            />
-          </section>
-        ) : null}
       </main>
+      {previewVisible ? (
+        <InvoicePreviewOverlay
+          draft={draft}
+          fileName={exportFileName}
+          isExporting={syncing}
+          qrDataUrl={qrDataUrl}
+          total={total}
+          onClose={() => setPreviewVisible(false)}
+          onExport={handleExportInvoice}
+        />
+      ) : null}
     </AppShell>
   )
 }
@@ -1360,6 +1360,51 @@ function SavedInvoicesCard({
   )
 }
 
+function InvoicePreviewOverlay({
+  draft,
+  fileName,
+  isExporting,
+  onClose,
+  onExport,
+  qrDataUrl,
+  total,
+}: {
+  draft: InvoiceDraft
+  fileName: string
+  isExporting: boolean
+  onClose: () => void
+  onExport: () => void
+  qrDataUrl: string
+  total: number
+}) {
+  return (
+    <section className="fixed inset-0 z-50 flex flex-col bg-background text-foreground">
+      <div className="no-print flex flex-col gap-3 border-b bg-background px-4 py-3 md:flex-row md:items-center md:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-xl font-semibold">Náhled faktury</h2>
+            <Badge variant="secondary">{draft.invoiceNumber}</Badge>
+          </div>
+          <p className="truncate text-sm text-muted-foreground">{fileName}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={onClose}>
+            <EyeOffIcon data-icon="inline-start" />
+            Zavřít náhled
+          </Button>
+          <Button onClick={onExport} disabled={isExporting}>
+            <PrinterIcon data-icon="inline-start" />
+            {isExporting ? "Exportuji" : "Export / PDF"}
+          </Button>
+        </div>
+      </div>
+      <div className="invoice-stage invoice-preview-stage">
+        <InvoiceDocument draft={draft} qrDataUrl={qrDataUrl} total={total} />
+      </div>
+    </section>
+  )
+}
+
 function InvoiceDocument({
   draft,
   qrDataUrl,
@@ -1504,6 +1549,27 @@ function InvoiceDocument({
       </footer>
     </article>
   )
+}
+
+function printInvoicePdf(draft: InvoiceDraft) {
+  const previousTitle = document.title
+  const pdfTitle = buildInvoicePdfFileName(draft).replace(/\.pdf$/i, "")
+  let didRestoreTitle = false
+
+  function restoreTitle() {
+    if (didRestoreTitle) {
+      return
+    }
+
+    didRestoreTitle = true
+    document.title = previousTitle
+    window.removeEventListener("afterprint", restoreTitle)
+  }
+
+  document.title = pdfTitle
+  window.addEventListener("afterprint", restoreTitle, { once: true })
+  window.print()
+  window.setTimeout(restoreTitle, 3000)
 }
 
 function createInvoiceStats(invoices: InvoiceSummary[]) {

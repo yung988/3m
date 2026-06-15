@@ -170,6 +170,12 @@
   padding-bottom: 1rem;
 }
 
+.invoice-preview-stage {
+  flex: 1;
+  overflow: auto;
+  padding: 1rem;
+}
+
 .invoice-sheet {
   box-sizing: border-box;
   display: flex;
@@ -434,6 +440,10 @@
     display: block;
     overflow: visible;
     padding: 0;
+  }
+
+  .invoice-preview-stage {
+    flex: none;
   }
 
   #invoice-print {
