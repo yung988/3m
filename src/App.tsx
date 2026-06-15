@@ -17,6 +17,7 @@ import {
   FilePlus2Icon,
   LayoutDashboardIcon,
   LogOutIcon,
+  MinusIcon,
   PlusCircleIcon,
   PlusIcon,
   PrinterIcon,
@@ -62,6 +63,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { priceCategories, priceList, type PriceItem } from "@/data/price-list"
+import { cn } from "@/lib/utils"
 import {
   buildPaymentQrString,
   calculateTotal,
@@ -109,6 +111,23 @@ type AppMessage = {
 
 type AppView = "dashboard" | "editor"
 
+type FilteredPriceItem = {
+  item: PriceItem
+  selectedLine: InvoiceLine | undefined
+}
+
+function isLineForPriceItem(line: InvoiceLine, item: PriceItem) {
+  return (
+    line.description === item.name &&
+    line.unitPrice === item.price &&
+    line.unitLabel === item.billingUnit
+  )
+}
+
+function findLineForPriceItem(lines: InvoiceLine[], item: PriceItem) {
+  return lines.find((line) => isLineForPriceItem(line, item))
+}
+
 function App() {
   const [draft, setDraft] = useState<InvoiceDraft>(() => readStoredDraft())
   const [selectedCategory, setSelectedCategory] = useState("all")
@@ -135,20 +154,33 @@ function App() {
     [draft, total]
   )
 
-  const filteredItems = useMemo(() => {
+  const filteredItems = useMemo<FilteredPriceItem[]>(() => {
     const query = search.trim().toLocaleLowerCase("cs-CZ")
 
-    return priceList.filter((item) => {
-      const categoryMatches =
-        selectedCategory === "all" || item.category === selectedCategory
-      const queryMatches =
-        query.length === 0 ||
-        item.name.toLocaleLowerCase("cs-CZ").includes(query) ||
-        item.category.toLocaleLowerCase("cs-CZ").includes(query)
+    return priceList
+      .map((item, index) => ({
+        index,
+        item,
+        selectedLine: findLineForPriceItem(draft.lines, item),
+      }))
+      .filter(({ item }) => {
+        const categoryMatches =
+          selectedCategory === "all" || item.category === selectedCategory
+        const queryMatches =
+          query.length === 0 ||
+          item.name.toLocaleLowerCase("cs-CZ").includes(query) ||
+          item.category.toLocaleLowerCase("cs-CZ").includes(query)
 
-      return categoryMatches && queryMatches
-    })
-  }, [search, selectedCategory])
+        return categoryMatches && queryMatches
+      })
+      .sort((a, b) => {
+        const selectedOrder =
+          Number(Boolean(b.selectedLine)) - Number(Boolean(a.selectedLine))
+
+        return selectedOrder || a.index - b.index
+      })
+      .map(({ item, selectedLine }) => ({ item, selectedLine }))
+  }, [draft.lines, search, selectedCategory])
 
   const showError = useCallback((title: string, error: unknown) => {
     setMessage({
@@ -269,13 +301,7 @@ function App() {
 
   function addPriceItem(item: PriceItem) {
     setDraft((current) => {
-      const existingLine = current.lines.find((line) => {
-        return (
-          line.description === item.name &&
-          line.unitPrice === item.price &&
-          line.unitLabel === item.billingUnit
-        )
-      })
+      const existingLine = findLineForPriceItem(current.lines, item)
 
       if (!existingLine) {
         return {
@@ -289,6 +315,34 @@ function App() {
         lines: current.lines.map((line) =>
           line.id === existingLine.id
             ? { ...line, quantity: line.quantity + item.defaultQuantity }
+            : line
+        ),
+      }
+    })
+  }
+
+  function removePriceItem(item: PriceItem) {
+    setDraft((current) => {
+      const existingLine = findLineForPriceItem(current.lines, item)
+
+      if (!existingLine) {
+        return current
+      }
+
+      const nextQuantity = existingLine.quantity - item.defaultQuantity
+
+      if (nextQuantity <= 0) {
+        return {
+          ...current,
+          lines: current.lines.filter((line) => line.id !== existingLine.id),
+        }
+      }
+
+      return {
+        ...current,
+        lines: current.lines.map((line) =>
+          line.id === existingLine.id
+            ? { ...line, quantity: nextQuantity }
             : line
         ),
       }
@@ -675,37 +729,86 @@ function App() {
               <div className="max-h-[62svh] overflow-y-auto pr-1">
                 {filteredItems.length > 0 ? (
                   <ul className="flex flex-col">
-                    {filteredItems.map((item) => (
-                      <li
-                        key={item.id}
-                        className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b py-3 last:border-b-0"
-                      >
-                        <div className="min-w-0">
-                          <p className="text-sm leading-snug font-medium">
-                            {item.name}
-                          </p>
-                          <div className="mt-2 flex flex-wrap items-center gap-2">
-                            <Badge variant="outline">{item.sourceUnit}</Badge>
-                            <span className="text-sm text-muted-foreground">
-                              {formatCurrency(item.price)}
-                            </span>
+                    {filteredItems.map(({ item, selectedLine }) => {
+                      const isSelected = Boolean(selectedLine)
+
+                      return (
+                        <li
+                          key={item.id}
+                          className={cn(
+                            "grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b px-2 py-3 last:border-b-0",
+                            isSelected && "bg-muted/45"
+                          )}
+                        >
+                          <div className="min-w-0">
+                            <p className="text-sm leading-snug font-medium">
+                              {item.name}
+                            </p>
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              <Badge variant="outline">{item.sourceUnit}</Badge>
+                              <span className="text-sm text-muted-foreground">
+                                {formatCurrency(item.price)}
+                              </span>
+                              {selectedLine ? (
+                                <Badge variant="secondary">na faktuře</Badge>
+                              ) : null}
+                            </div>
                           </div>
-                        </div>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="icon"
-                              variant="outline"
-                              aria-label={`Přidat: ${item.name}`}
-                              onClick={() => addPriceItem(item)}
-                            >
-                              <PlusIcon data-icon="inline-start" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Přidat položku</TooltipContent>
-                        </Tooltip>
-                      </li>
-                    ))}
+                          {selectedLine ? (
+                            <div className="flex h-10 shrink-0 items-center gap-1 rounded-md border bg-background p-1">
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="size-8"
+                                    aria-label={`Ubrat: ${item.name}`}
+                                    onClick={() => removePriceItem(item)}
+                                  >
+                                    <MinusIcon data-icon="inline-start" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Ubrat položku</TooltipContent>
+                              </Tooltip>
+                              <span className="min-w-12 text-center text-sm font-semibold tabular-nums">
+                                {formatQuantity(
+                                  selectedLine.quantity,
+                                  item.billingUnit
+                                )}
+                              </span>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="size-8"
+                                    aria-label={`Přidat: ${item.name}`}
+                                    onClick={() => addPriceItem(item)}
+                                  >
+                                    <PlusIcon data-icon="inline-start" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Přidat položku</TooltipContent>
+                              </Tooltip>
+                            </div>
+                          ) : (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  size="icon"
+                                  variant="outline"
+                                  aria-label={`Přidat: ${item.name}`}
+                                  onClick={() => addPriceItem(item)}
+                                >
+                                  <PlusIcon data-icon="inline-start" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Přidat položku</TooltipContent>
+                            </Tooltip>
+                          )}
+                        </li>
+                      )
+                    })}
                   </ul>
                 ) : (
                   <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
