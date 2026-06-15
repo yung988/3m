@@ -26,6 +26,8 @@ export type Database = {
           paid_at: string | null
           total_amount: number
           currency: string
+          exported_at: string | null
+          export_count: number
           created_at: string
           updated_at: string
         }
@@ -45,6 +47,8 @@ export type Database = {
           paid_at?: string | null
           total_amount?: number
           currency?: string
+          exported_at?: string | null
+          export_count?: number
           created_at?: string
           updated_at?: string
         }
@@ -64,6 +68,8 @@ export type Database = {
           paid_at?: string | null
           total_amount?: number
           currency?: string
+          exported_at?: string | null
+          export_count?: number
           created_at?: string
           updated_at?: string
         }

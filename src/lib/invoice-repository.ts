@@ -7,7 +7,7 @@ import {
   type InvoiceLine,
   type InvoiceStatus,
 } from "@/lib/invoice"
-import { supabase } from "@/lib/supabase"
+import { getSupabaseClient } from "@/lib/supabase"
 
 type InvoiceRow = Database["public"]["Tables"]["invoices"]["Row"]
 type InvoiceLineRow = Database["public"]["Tables"]["invoice_lines"]["Row"]
@@ -22,7 +22,10 @@ export type InvoiceSummary = Pick<
   | "issue_date"
   | "due_date"
   | "status"
+  | "paid_at"
   | "total_amount"
+  | "exported_at"
+  | "export_count"
   | "updated_at"
 >
 
@@ -31,10 +34,11 @@ type InvoiceWithLines = InvoiceRow & {
 }
 
 export async function listInvoices() {
+  const supabase = getSupabaseClient()
   const { data, error } = await supabase
     .from("invoices")
     .select(
-      "id, invoice_number, customer_name, issue_date, due_date, status, total_amount, updated_at"
+      "id, invoice_number, customer_name, issue_date, due_date, status, paid_at, total_amount, exported_at, export_count, updated_at"
     )
     .order("issue_date", { ascending: false })
     .order("updated_at", { ascending: false })
@@ -47,6 +51,7 @@ export async function listInvoices() {
 }
 
 export async function loadInvoice(id: string) {
+  const supabase = getSupabaseClient()
   const { data, error } = await supabase
     .from("invoices")
     .select("*, invoice_lines(*)")
@@ -61,6 +66,7 @@ export async function loadInvoice(id: string) {
 }
 
 export async function saveInvoice(draft: InvoiceDraft, user: User) {
+  const supabase = getSupabaseClient()
   const invoicePayload = toInvoicePayload(draft, user)
   const invoiceResult = draft.id
     ? await supabase
@@ -112,11 +118,50 @@ export async function saveInvoice(draft: InvoiceDraft, user: User) {
 }
 
 export async function deleteInvoice(id: string) {
+  const supabase = getSupabaseClient()
   const { error } = await supabase.from("invoices").delete().eq("id", id)
 
   if (error) {
     throw error
   }
+}
+
+export async function markInvoiceExported(id: string) {
+  const supabase = getSupabaseClient()
+  const { data, error } = await supabase
+    .from("invoices")
+    .update({
+      exported_at: new Date().toISOString(),
+      export_count: await getNextExportCount(id),
+    })
+    .eq("id", id)
+    .select("*, invoice_lines(*)")
+    .single()
+
+  if (error) {
+    throw error
+  }
+
+  return fromInvoiceRow(data as InvoiceWithLines)
+}
+
+export async function setInvoicePaid(id: string, isPaid: boolean) {
+  const supabase = getSupabaseClient()
+  const { data, error } = await supabase
+    .from("invoices")
+    .update({
+      status: isPaid ? "paid" : "issued",
+      paid_at: isPaid ? toDateInput(new Date()) : null,
+    })
+    .eq("id", id)
+    .select("*, invoice_lines(*)")
+    .single()
+
+  if (error) {
+    throw error
+  }
+
+  return fromInvoiceRow(data as InvoiceWithLines)
 }
 
 function toInvoicePayload(draft: InvoiceDraft, user: User): InvoiceInsert {
@@ -133,6 +178,8 @@ function toInvoicePayload(draft: InvoiceDraft, user: User): InvoiceInsert {
     customer_tax_id: draft.customerTaxId,
     status: draft.status,
     paid_at: draft.paidAt,
+    exported_at: draft.exportedAt,
+    export_count: draft.exportCount,
     total_amount: calculateTotal(draft.lines),
     currency: "CZK",
   }
@@ -164,6 +211,31 @@ function fromInvoiceRow(row: InvoiceWithLines): InvoiceDraft {
     customerTaxId: row.customer_tax_id,
     status: row.status as InvoiceStatus,
     paidAt: row.paid_at,
+    exportedAt: row.exported_at,
+    exportCount: row.export_count,
     lines,
   }
+}
+
+async function getNextExportCount(id: string) {
+  const supabase = getSupabaseClient()
+  const { data, error } = await supabase
+    .from("invoices")
+    .select("export_count")
+    .eq("id", id)
+    .single()
+
+  if (error) {
+    throw error
+  }
+
+  return data.export_count + 1
+}
+
+function toDateInput(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+
+  return `${year}-${month}-${day}`
 }

@@ -1,9 +1,19 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react"
 import type { Session } from "@supabase/supabase-js"
 import * as QRCode from "qrcode"
 import {
+  BanknoteIcon,
+  CheckCircle2Icon,
+  CircleDollarSignIcon,
   CloudIcon,
   FilePlus2Icon,
+  LayoutDashboardIcon,
   LogOutIcon,
   PlusCircleIcon,
   PlusIcon,
@@ -58,6 +68,7 @@ import {
   createLineFromPriceItem,
   formatCurrency,
   formatDate,
+  formatDateTime,
   formatQuantity,
   normalizeMoneyInput,
   payment,
@@ -70,12 +81,14 @@ import {
   deleteInvoice,
   listInvoices,
   loadInvoice,
+  markInvoiceExported,
   saveInvoice,
+  setInvoicePaid,
   type InvoiceSummary,
 } from "@/lib/invoice-repository"
-import { supabase } from "@/lib/supabase"
+import { missingSupabaseEnv, supabase } from "@/lib/supabase"
 
-const STORAGE_KEY = "faktury-pro-stepu:draft:v1"
+const STORAGE_KEY = "faktury-pro-stepu:draft:v2"
 
 const statusLabels: Record<InvoiceStatus, string> = {
   draft: "Rozpracováno",
@@ -91,13 +104,15 @@ type AppMessage = {
   variant?: "default" | "destructive"
 }
 
+type AppView = "dashboard" | "editor"
+
 function App() {
   const [draft, setDraft] = useState<InvoiceDraft>(() => readStoredDraft())
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [search, setSearch] = useState("")
   const [qrDataUrl, setQrDataUrl] = useState("")
   const [session, setSession] = useState<Session | null>(null)
-  const [authReady, setAuthReady] = useState(false)
+  const [authReady, setAuthReady] = useState(!supabase)
   const [authEmail, setAuthEmail] = useState("")
   const [authPassword, setAuthPassword] = useState("")
   const [authLoading, setAuthLoading] = useState(false)
@@ -105,9 +120,11 @@ function App() {
   const [savedInvoicesLoading, setSavedInvoicesLoading] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [message, setMessage] = useState<AppMessage | null>(null)
+  const [view, setView] = useState<AppView>("dashboard")
 
   const total = useMemo(() => calculateTotal(draft.lines), [draft.lines])
   const user = session?.user ?? null
+  const databaseIsConfigured = supabase !== null
   const paymentQrString = useMemo(
     () => buildPaymentQrString(draft, total),
     [draft, total]
@@ -153,6 +170,10 @@ function App() {
   }, [draft])
 
   useEffect(() => {
+    if (!supabase) {
+      return
+    }
+
     let isMounted = true
 
     supabase.auth.getSession().then(({ data }) => {
@@ -171,6 +192,7 @@ function App() {
       setAuthReady(true)
       if (!nextSession) {
         setSavedInvoices([])
+        setView("dashboard")
       }
     })
 
@@ -220,6 +242,19 @@ function App() {
     }))
   }
 
+  function updateInvoiceStatus(status: InvoiceStatus) {
+    const nextPaidAt =
+      status === "paid"
+        ? draft.paidAt || new Date().toISOString().slice(0, 10)
+        : null
+
+    setDraft((current) => ({
+      ...current,
+      status,
+      paidAt: nextPaidAt,
+    }))
+  }
+
   function addLine(line: InvoiceLine) {
     setDraft((current) => ({
       ...current,
@@ -244,12 +279,23 @@ function App() {
   }
 
   function resetDraft() {
-    if (window.confirm("Vrátit ukázkovou fakturu a smazat rozepsané změny?")) {
+    if (
+      window.confirm("Vrátit prázdnou novou fakturu a smazat rozepsané změny?")
+    ) {
       setDraft(createDefaultDraft())
     }
   }
 
   async function handleAuth(mode: "sign-in" | "sign-up") {
+    if (!supabase) {
+      setMessage({
+        title: "Chybí nastavení Supabase",
+        description: `Doplň env proměnné ${missingSupabaseEnv.join(", ")} a znovu nasaď aplikaci.`,
+        variant: "destructive",
+      })
+      return
+    }
+
     setAuthLoading(true)
     setMessage(null)
 
@@ -285,6 +331,10 @@ function App() {
   }
 
   async function handleSignOut() {
+    if (!supabase) {
+      return
+    }
+
     const { error } = await supabase.auth.signOut()
 
     if (error) {
@@ -301,9 +351,12 @@ function App() {
   async function handleSaveInvoice() {
     if (!user) {
       setMessage({
-        title: "Nejdřív se přihlas",
-        description:
-          "Bez přihlášení můžeš fakturu sestavit a tisknout, ale ne uložit do databáze.",
+        title: databaseIsConfigured
+          ? "Nejdřív se přihlas"
+          : "Chybí nastavení Supabase",
+        description: databaseIsConfigured
+          ? "Bez přihlášení můžeš fakturu sestavit a tisknout, ale ne uložit do databáze."
+          : `Bez env proměnných ${missingSupabaseEnv.join(", ")} nejde ukládat do databáze.`,
         variant: "destructive",
       })
       return
@@ -329,6 +382,7 @@ function App() {
     try {
       setSyncing(true)
       setDraft(await loadInvoice(id))
+      setView("editor")
       setMessage({
         title: "Faktura načtena",
         description: "Uložený doklad se propsal do editoru.",
@@ -351,6 +405,7 @@ function App() {
 
       if (draft.id === id) {
         setDraft(createDefaultDraft())
+        setView("dashboard")
       }
 
       await refreshSavedInvoices()
@@ -365,86 +420,170 @@ function App() {
     }
   }
 
+  async function handleTogglePaid(id: string, isPaid: boolean) {
+    try {
+      setSyncing(true)
+      const updatedDraft = await setInvoicePaid(id, isPaid)
+
+      if (draft.id === id) {
+        setDraft(updatedDraft)
+      }
+
+      await refreshSavedInvoices()
+      setMessage({
+        title: isPaid
+          ? "Faktura označena jako zaplacená"
+          : "Faktura označena jako nezaplacená",
+        description: `Doklad ${updatedDraft.invoiceNumber} byl aktualizovaný.`,
+      })
+    } catch (error) {
+      showError("Změna platby selhala", error)
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  async function handleExportInvoice() {
+    if (!user) {
+      setMessage({
+        title: "Export bez databázového záznamu",
+        description:
+          "Tisk se spustí, ale stav exportu se uloží až u přihlášené a uložené faktury.",
+      })
+      window.print()
+      return
+    }
+
+    try {
+      setSyncing(true)
+      const savedDraft = await saveInvoice(draft, user)
+      const exportedDraft = await markInvoiceExported(savedDraft.id!)
+      setDraft(exportedDraft)
+      await refreshSavedInvoices()
+      setMessage({
+        title: "Faktura označena jako exportovaná",
+        description: `Doklad ${exportedDraft.invoiceNumber} má uložený čas exportu.`,
+      })
+      window.print()
+    } catch (error) {
+      showError("Export faktury selhal", error)
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   function handleNewInvoice() {
     setDraft(createDefaultDraft())
+    setView("editor")
     setMessage({
       title: "Nová faktura",
       description: "Editor je připravený pro další doklad.",
     })
   }
 
-  return (
-    <div className="min-h-svh bg-background text-foreground">
-      <header className="no-print sticky top-0 border-b bg-background/95 backdrop-blur">
-        <div className="mx-auto flex max-w-[1800px] flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl leading-tight font-semibold">
-                Faktury pro Štěpu
-              </h1>
-              <Badge variant="secondary">3M ENERGY</Badge>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Klikací ceník, rozepsané položky a faktura připravená pro tisk do
-              PDF.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {user ? (
-              <Badge variant="outline" className="h-8 max-w-56 truncate px-3">
-                {user.email}
-              </Badge>
-            ) : null}
-            <Button variant="outline" onClick={handleNewInvoice}>
-              <PlusCircleIcon data-icon="inline-start" />
-              Nová
-            </Button>
-            <Button
-              onClick={handleSaveInvoice}
-              disabled={syncing || !authReady}
-            >
-              <SaveIcon data-icon="inline-start" />
-              {syncing ? "Ukládám" : "Uložit"}
-            </Button>
-            <Button variant="outline" onClick={resetDraft}>
-              <RotateCcwIcon data-icon="inline-start" />
-              Reset
-            </Button>
-            <Button onClick={() => window.print()}>
-              <PrinterIcon data-icon="inline-start" />
-              Tisk / PDF
-            </Button>
-            {user ? (
-              <Button variant="outline" onClick={handleSignOut}>
-                <LogOutIcon data-icon="inline-start" />
-                Odhlásit
-              </Button>
-            ) : null}
-          </div>
-        </div>
-      </header>
+  const dashboardActions = user ? (
+    <>
+      <Button onClick={handleNewInvoice}>
+        <PlusCircleIcon data-icon="inline-start" />
+        Nová faktura
+      </Button>
+      <Button variant="outline" onClick={handleSignOut}>
+        <LogOutIcon data-icon="inline-start" />
+        Odhlásit
+      </Button>
+    </>
+  ) : null
 
-      <main className="mx-auto grid max-w-[1800px] grid-cols-1 gap-4 p-4 lg:grid-cols-[minmax(300px,360px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(320px,380px)_minmax(560px,1fr)_minmax(520px,680px)]">
-        <div className="no-print flex h-fit flex-col gap-4 lg:sticky lg:top-24">
-          {user ? (
+  const editorActions = user ? (
+    <>
+      <Button variant="outline" onClick={() => setView("dashboard")}>
+        <LayoutDashboardIcon data-icon="inline-start" />
+        Přehled
+      </Button>
+      <Button variant="outline" onClick={handleNewInvoice}>
+        <PlusCircleIcon data-icon="inline-start" />
+        Nová
+      </Button>
+      <Button onClick={handleSaveInvoice} disabled={syncing || !authReady}>
+        <SaveIcon data-icon="inline-start" />
+        {syncing ? "Ukládám" : "Uložit"}
+      </Button>
+      <Button variant="outline" onClick={resetDraft}>
+        <RotateCcwIcon data-icon="inline-start" />
+        Reset
+      </Button>
+      <Button onClick={handleExportInvoice} disabled={syncing}>
+        <PrinterIcon data-icon="inline-start" />
+        Export / PDF
+      </Button>
+      <Button variant="outline" onClick={handleSignOut}>
+        <LogOutIcon data-icon="inline-start" />
+        Odhlásit
+      </Button>
+    </>
+  ) : null
+
+  if (!authReady) {
+    return (
+      <AppShell>
+        <main className="mx-auto flex min-h-[calc(100svh-88px)] max-w-lg flex-col justify-center p-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Načítám přihlášení</CardTitle>
+              <CardDescription>
+                Kontroluji relaci Supabase v prohlížeči.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </main>
+      </AppShell>
+    )
+  }
+
+  if (!user) {
+    return (
+      <AppShell>
+        <main className="mx-auto flex min-h-[calc(100svh-88px)] max-w-lg flex-col justify-center gap-4 p-4">
+          {message ? <MessageAlert message={message} /> : null}
+          <AuthCard
+            email={authEmail}
+            isLoading={authLoading}
+            missingEnv={missingSupabaseEnv}
+            onEmailChange={setAuthEmail}
+            onPasswordChange={setAuthPassword}
+            onSubmit={handleAuth}
+            password={authPassword}
+          />
+        </main>
+      </AppShell>
+    )
+  }
+
+  if (view === "dashboard") {
+    return (
+      <AppShell actions={dashboardActions} userEmail={user.email}>
+        <main className="mx-auto flex max-w-[1200px] flex-col gap-4 p-4">
+          {message ? <MessageAlert message={message} /> : null}
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.35fr)]">
+            <InvoiceStatsCard invoices={savedInvoices} />
             <SavedInvoicesCard
               activeInvoiceId={draft.id}
               invoices={savedInvoices}
               isLoading={savedInvoicesLoading}
               onDelete={handleDeleteInvoice}
               onLoad={handleLoadInvoice}
+              onTogglePaid={handleTogglePaid}
             />
-          ) : (
-            <AuthCard
-              email={authEmail}
-              isLoading={authLoading}
-              onEmailChange={setAuthEmail}
-              onPasswordChange={setAuthPassword}
-              onSubmit={handleAuth}
-              password={authPassword}
-            />
-          )}
+          </div>
+        </main>
+      </AppShell>
+    )
+  }
 
+  return (
+    <AppShell actions={editorActions} userEmail={user.email}>
+      <main className="mx-auto grid max-w-[1800px] grid-cols-1 gap-4 p-4 lg:grid-cols-[minmax(300px,360px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(320px,380px)_minmax(560px,1fr)_minmax(520px,680px)]">
+        <div className="no-print flex h-fit flex-col gap-4 lg:sticky lg:top-24">
           <Card>
             <CardHeader>
               <CardTitle>Ceník úkonů</CardTitle>
@@ -599,7 +738,7 @@ function App() {
                   <Select
                     value={draft.status}
                     onValueChange={(value) =>
-                      updateDraftField("status", value as InvoiceStatus)
+                      updateInvoiceStatus(value as InvoiceStatus)
                     }
                   >
                     <SelectTrigger className="w-full">
@@ -644,6 +783,31 @@ function App() {
                 </Field>
               </FieldGroup>
             </FieldSet>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-lg border bg-card p-3">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <BanknoteIcon data-icon="inline-start" />
+                  Platba
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {draft.status === "paid"
+                    ? `Zaplaceno${draft.paidAt ? ` ${formatDate(draft.paidAt)}` : ""}`
+                    : "Nezaplaceno"}
+                </p>
+              </div>
+              <div className="rounded-lg border bg-card p-3">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <PrinterIcon data-icon="inline-start" />
+                  Export
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {draft.exportedAt
+                    ? `Exportováno ${formatDateTime(draft.exportedAt)}`
+                    : "Neexportováno"}
+                </p>
+              </div>
+            </div>
 
             <Separator />
 
@@ -806,13 +970,64 @@ function App() {
           <InvoiceDocument draft={draft} qrDataUrl={qrDataUrl} total={total} />
         </section>
       </main>
+    </AppShell>
+  )
+}
+
+function AppShell({
+  actions,
+  children,
+  userEmail,
+}: {
+  actions?: ReactNode
+  children: ReactNode
+  userEmail?: string
+}) {
+  return (
+    <div className="min-h-svh bg-background text-foreground">
+      <header className="no-print sticky top-0 border-b bg-background/95 backdrop-blur">
+        <div className="mx-auto flex max-w-[1800px] flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl leading-tight font-semibold">
+                Faktury pro Štěpu
+              </h1>
+              <Badge variant="secondary">3M ENERGY</Badge>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Přehled faktur, stav plateb a rychlé vytvoření PDF.
+            </p>
+          </div>
+          {actions || userEmail ? (
+            <div className="flex flex-wrap gap-2">
+              {userEmail ? (
+                <Badge variant="outline" className="h-8 max-w-56 truncate px-3">
+                  {userEmail}
+                </Badge>
+              ) : null}
+              {actions}
+            </div>
+          ) : null}
+        </div>
+      </header>
+      {children}
     </div>
+  )
+}
+
+function MessageAlert({ message }: { message: AppMessage }) {
+  return (
+    <Alert variant={message.variant}>
+      <AlertTitle>{message.title}</AlertTitle>
+      <AlertDescription>{message.description}</AlertDescription>
+    </Alert>
   )
 }
 
 function AuthCard({
   email,
   isLoading,
+  missingEnv,
   onEmailChange,
   onPasswordChange,
   onSubmit,
@@ -820,11 +1035,14 @@ function AuthCard({
 }: {
   email: string
   isLoading: boolean
+  missingEnv: string[]
   onEmailChange: (value: string) => void
   onPasswordChange: (value: string) => void
   onSubmit: (mode: "sign-in" | "sign-up") => void
   password: string
 }) {
+  const hasMissingEnv = missingEnv.length > 0
+
   return (
     <Card>
       <CardHeader>
@@ -833,7 +1051,17 @@ function AuthCard({
           Přihlášení zapne ukládání faktur do Supabase.
         </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex flex-col gap-4">
+        {hasMissingEnv ? (
+          <Alert variant="destructive">
+            <AlertTitle>Chybí env proměnné</AlertTitle>
+            <AlertDescription>
+              Na Vercelu doplň {missingEnv.join(", ")} a spusť nový deploy.
+              Editor půjde používat lokálně, ale ukládání do databáze nebude
+              dostupné.
+            </AlertDescription>
+          </Alert>
+        ) : null}
         <form
           className="flex flex-col gap-4"
           onSubmit={(event) => {
@@ -851,6 +1079,7 @@ function AuthCard({
                 required
                 type="email"
                 value={email}
+                disabled={hasMissingEnv}
                 onChange={(event) => onEmailChange(event.target.value)}
               />
             </Field>
@@ -863,19 +1092,20 @@ function AuthCard({
                 required
                 type="password"
                 value={password}
+                disabled={hasMissingEnv}
                 onChange={(event) => onPasswordChange(event.target.value)}
               />
             </Field>
           </FieldGroup>
           <div className="grid grid-cols-2 gap-2">
-            <Button type="submit" disabled={isLoading}>
+            <Button type="submit" disabled={isLoading || hasMissingEnv}>
               <CloudIcon data-icon="inline-start" />
               Přihlásit
             </Button>
             <Button
               type="button"
               variant="outline"
-              disabled={isLoading}
+              disabled={isLoading || hasMissingEnv}
               onClick={() => onSubmit("sign-up")}
             >
               Vytvořit účet
@@ -887,18 +1117,92 @@ function AuthCard({
   )
 }
 
+function InvoiceStatsCard({ invoices }: { invoices: InvoiceSummary[] }) {
+  const stats = useMemo(() => createInvoiceStats(invoices), [invoices])
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <CircleDollarSignIcon data-icon="inline-start" />
+          Přehled
+        </CardTitle>
+        <CardDescription>Rychlý stav uložených faktur.</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-2 gap-2">
+          <StatTile
+            label="Doma"
+            value={formatCurrency(stats.paidTotal)}
+            detail={`${formatInvoiceCount(stats.paidCount)} zaplaceno`}
+          />
+          <StatTile
+            label="Nezaplaceno"
+            value={formatCurrency(stats.unpaidTotal)}
+            detail={`${formatInvoiceCount(stats.unpaidCount)} otevřeno`}
+          />
+          <StatTile
+            label="Čeká na export"
+            value={formatCurrency(stats.waitingExportTotal)}
+            detail={formatInvoiceCount(stats.waitingExportCount)}
+          />
+          <StatTile
+            label="Čeká na platbu"
+            value={formatCurrency(stats.waitingPaymentTotal)}
+            detail={formatInvoiceCount(stats.waitingPaymentCount)}
+          />
+        </div>
+
+        <Separator />
+
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="secondary">
+            {formatInvoiceCount(invoices.length)} celkem
+          </Badge>
+          <Badge variant="outline">
+            {formatInvoiceCount(stats.cancelledCount)} storno
+          </Badge>
+          <Badge variant="outline">
+            {formatCurrency(stats.activeTotal)} aktivně v oběhu
+          </Badge>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function StatTile({
+  detail,
+  label,
+  value,
+}: {
+  detail: string
+  label: string
+  value: string
+}) {
+  return (
+    <div className="rounded-lg border bg-card p-3">
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className="mt-1 text-base leading-tight font-semibold">{value}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+    </div>
+  )
+}
+
 function SavedInvoicesCard({
   activeInvoiceId,
   invoices,
   isLoading,
   onDelete,
   onLoad,
+  onTogglePaid,
 }: {
   activeInvoiceId?: string
   invoices: InvoiceSummary[]
   isLoading: boolean
   onDelete: (id: string) => void
   onLoad: (id: string) => void
+  onTogglePaid: (id: string, isPaid: boolean) => void
 }) {
   return (
     <Card>
@@ -915,10 +1219,10 @@ function SavedInvoicesCard({
           </div>
         ) : invoices.length === 0 ? (
           <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-            Zatím nic uloženého. Vyplň fakturu a klikni na Uložit.
+            Zatím nic uloženého. Klikni na Nová faktura a vytvoř první doklad.
           </div>
         ) : (
-          <ul className="flex max-h-72 flex-col overflow-y-auto">
+          <ul className="flex max-h-[60svh] flex-col overflow-y-auto">
             {invoices.map((invoice) => (
               <li
                 key={invoice.id}
@@ -941,23 +1245,67 @@ function SavedInvoicesCard({
                     {invoice.customer_name || "Bez odběratele"} ·{" "}
                     {formatCurrency(Number(invoice.total_amount))}
                   </span>
-                  <span className="mt-1 block text-xs text-muted-foreground">
-                    {statusLabels[invoice.status as InvoiceStatus]}
-                  </span>
-                </button>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      aria-label={`Smazat fakturu ${invoice.invoice_number}`}
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => onDelete(invoice.id)}
+                  <span className="mt-2 flex flex-wrap gap-1">
+                    <Badge
+                      variant={
+                        invoice.status === "paid" ? "default" : "outline"
+                      }
                     >
-                      <Trash2Icon data-icon="inline-start" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Smazat z databáze</TooltipContent>
-                </Tooltip>
+                      {invoice.status === "paid" ? "zaplaceno" : "nezaplaceno"}
+                    </Badge>
+                    <Badge
+                      variant={invoice.exported_at ? "secondary" : "outline"}
+                    >
+                      {invoice.exported_at ? "exportováno" : "neexportováno"}
+                    </Badge>
+                    <Badge variant="outline">
+                      {statusLabels[invoice.status as InvoiceStatus]}
+                    </Badge>
+                  </span>
+                  {invoice.exported_at ? (
+                    <span className="mt-1 block text-xs text-muted-foreground">
+                      Export: {formatDateTime(invoice.exported_at)}
+                    </span>
+                  ) : null}
+                </button>
+                <div className="flex flex-col gap-1">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        aria-label={
+                          invoice.status === "paid"
+                            ? `Označit fakturu ${invoice.invoice_number} jako nezaplacenou`
+                            : `Označit fakturu ${invoice.invoice_number} jako zaplacenou`
+                        }
+                        size="icon"
+                        variant="outline"
+                        onClick={() =>
+                          onTogglePaid(invoice.id, invoice.status !== "paid")
+                        }
+                      >
+                        <CheckCircle2Icon data-icon="inline-start" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {invoice.status === "paid"
+                        ? "Označit jako nezaplacené"
+                        : "Označit jako zaplacené"}
+                    </TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        aria-label={`Smazat fakturu ${invoice.invoice_number}`}
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => onDelete(invoice.id)}
+                      >
+                        <Trash2Icon data-icon="inline-start" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Smazat z databáze</TooltipContent>
+                  </Tooltip>
+                </div>
               </li>
             ))}
           </ul>
@@ -1111,6 +1459,65 @@ function InvoiceDocument({
       </footer>
     </article>
   )
+}
+
+function createInvoiceStats(invoices: InvoiceSummary[]) {
+  return invoices.reduce(
+    (stats, invoice) => {
+      const amount = Number(invoice.total_amount) || 0
+      const isCancelled = invoice.status === "cancelled"
+      const isPaid = invoice.status === "paid"
+
+      if (isCancelled) {
+        stats.cancelledCount += 1
+        return stats
+      }
+
+      if (isPaid) {
+        stats.paidCount += 1
+        stats.paidTotal += amount
+        return stats
+      }
+
+      stats.unpaidCount += 1
+      stats.unpaidTotal += amount
+      stats.activeTotal += amount
+
+      if (invoice.exported_at) {
+        stats.waitingPaymentCount += 1
+        stats.waitingPaymentTotal += amount
+      } else {
+        stats.waitingExportCount += 1
+        stats.waitingExportTotal += amount
+      }
+
+      return stats
+    },
+    {
+      activeTotal: 0,
+      cancelledCount: 0,
+      paidCount: 0,
+      paidTotal: 0,
+      unpaidCount: 0,
+      unpaidTotal: 0,
+      waitingExportCount: 0,
+      waitingExportTotal: 0,
+      waitingPaymentCount: 0,
+      waitingPaymentTotal: 0,
+    }
+  )
+}
+
+function formatInvoiceCount(count: number) {
+  if (count === 1) {
+    return "1 faktura"
+  }
+
+  if (count > 1 && count < 5) {
+    return `${count} faktury`
+  }
+
+  return `${count} faktur`
 }
 
 function readStoredDraft() {

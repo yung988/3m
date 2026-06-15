@@ -28,6 +28,8 @@ export type InvoiceDraft = {
   customerTaxId: string
   status: InvoiceStatus
   paidAt: string | null
+  exportedAt: string | null
+  exportCount: number
   lines: InvoiceLine[]
 }
 
@@ -76,6 +78,17 @@ export function formatDate(dateInput: string) {
   )
 }
 
+export function formatDateTime(dateInput: string) {
+  if (!dateInput) {
+    return ""
+  }
+
+  return new Intl.DateTimeFormat("cs-CZ", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date(dateInput))
+}
+
 export function formatQuantity(quantity: number, unitLabel: string) {
   const amount = numberFormatter.format(quantity)
 
@@ -117,45 +130,17 @@ export function createDefaultDraft(): InvoiceDraft {
     invoiceNumber: `${new Date().getFullYear()}0015`,
     issueDate,
     dueDate: toDateInput(due),
-    projectTitle: "instalaci Datahub a Nord Power – Klíma",
-    projectSubtitle: "Brno-Líšeň",
+    projectTitle: "",
+    projectSubtitle: "",
     customerName: "3M ENERGY s.r.o.",
     customerAddress: "Kaštanová 489/34\n62000 Brno\nČeská republika",
     customerCompanyId: "14054001",
     customerTaxId: "CZ14054001",
     status: "draft",
     paidAt: null,
-    lines: [
-      {
-        id: createId(),
-        description:
-          "Klíma (Brno-líšeň) - instalace SOLAX DATAHUBu a k němu připojeno a nastaveno: Smartmeter, Hybrid inv, Grid inv, WB, Nord Power Pro",
-        quantity: 1,
-        unitPrice: 3500,
-        unitLabel: "",
-      },
-      {
-        id: createId(),
-        description: "Instalace Nord Power PRO",
-        quantity: 1,
-        unitPrice: 1500,
-        unitLabel: "",
-      },
-      {
-        id: createId(),
-        description: "Instalace SSR relé",
-        quantity: 1,
-        unitPrice: 500,
-        unitLabel: "",
-      },
-      {
-        id: createId(),
-        description: "Cesta",
-        quantity: 2,
-        unitPrice: 150,
-        unitLabel: "hod",
-      },
-    ],
+    exportedAt: null,
+    exportCount: 0,
+    lines: [],
   }
 }
 
