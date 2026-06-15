@@ -12,6 +12,8 @@ import {
   CheckCircle2Icon,
   CircleDollarSignIcon,
   CloudIcon,
+  EyeIcon,
+  EyeOffIcon,
   FilePlus2Icon,
   LayoutDashboardIcon,
   LogOutIcon,
@@ -59,7 +61,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { priceCategories, priceList } from "@/data/price-list"
+import { priceCategories, priceList, type PriceItem } from "@/data/price-list"
 import {
   buildPaymentQrString,
   calculateTotal,
@@ -121,6 +123,7 @@ function App() {
   const [syncing, setSyncing] = useState(false)
   const [message, setMessage] = useState<AppMessage | null>(null)
   const [view, setView] = useState<AppView>("dashboard")
+  const [previewVisible, setPreviewVisible] = useState(false)
 
   const total = useMemo(() => calculateTotal(draft.lines), [draft.lines])
   const user = session?.user ?? null
@@ -262,6 +265,34 @@ function App() {
     }))
   }
 
+  function addPriceItem(item: PriceItem) {
+    setDraft((current) => {
+      const existingLine = current.lines.find((line) => {
+        return (
+          line.description === item.name &&
+          line.unitPrice === item.price &&
+          line.unitLabel === item.billingUnit
+        )
+      })
+
+      if (!existingLine) {
+        return {
+          ...current,
+          lines: [...current.lines, createLineFromPriceItem(item)],
+        }
+      }
+
+      return {
+        ...current,
+        lines: current.lines.map((line) =>
+          line.id === existingLine.id
+            ? { ...line, quantity: line.quantity + item.defaultQuantity }
+            : line
+        ),
+      }
+    })
+  }
+
   function updateLine(id: string, changes: Partial<InvoiceLine>) {
     setDraft((current) => ({
       ...current,
@@ -286,7 +317,7 @@ function App() {
     }
   }
 
-  async function handleAuth(mode: "sign-in" | "sign-up") {
+  async function handleAuth() {
     if (!supabase) {
       setMessage({
         title: "Chybí nastavení Supabase",
@@ -304,27 +335,18 @@ function App() {
         email: authEmail.trim(),
         password: authPassword,
       }
-      const { error } =
-        mode === "sign-in"
-          ? await supabase.auth.signInWithPassword(credentials)
-          : await supabase.auth.signUp(credentials)
+      const { error } = await supabase.auth.signInWithPassword(credentials)
 
       if (error) {
         throw error
       }
 
       setMessage({
-        title: mode === "sign-in" ? "Přihlášeno" : "Účet vytvořen",
-        description:
-          mode === "sign-in"
-            ? "Faktury se teď můžou ukládat do Supabase."
-            : "Pokud má projekt zapnuté potvrzení e-mailu, potvrď účet v e-mailu a potom se přihlas.",
+        title: "Přihlášeno",
+        description: "Faktury se teď můžou ukládat do Supabase.",
       })
     } catch (error) {
-      showError(
-        mode === "sign-in" ? "Přihlášení selhalo" : "Registrace selhala",
-        error
-      )
+      showError("Přihlášení selhalo", error)
     } finally {
       setAuthLoading(false)
     }
@@ -383,6 +405,7 @@ function App() {
       setSyncing(true)
       setDraft(await loadInvoice(id))
       setView("editor")
+      setPreviewVisible(false)
       setMessage({
         title: "Faktura načtena",
         description: "Uložený doklad se propsal do editoru.",
@@ -444,6 +467,16 @@ function App() {
   }
 
   async function handleExportInvoice() {
+    if (!previewVisible) {
+      setPreviewVisible(true)
+      setMessage({
+        title: "Zkontroluj náhled",
+        description:
+          "Faktura je teď zobrazená vedle editoru. Pokud sedí, klikni znovu na Export / PDF.",
+      })
+      return
+    }
+
     if (!user) {
       setMessage({
         title: "Export bez databázového záznamu",
@@ -475,6 +508,7 @@ function App() {
   function handleNewInvoice() {
     setDraft(createDefaultDraft())
     setView("editor")
+    setPreviewVisible(false)
     setMessage({
       title: "Nová faktura",
       description: "Editor je připravený pro další doklad.",
@@ -503,6 +537,17 @@ function App() {
       <Button variant="outline" onClick={handleNewInvoice}>
         <PlusCircleIcon data-icon="inline-start" />
         Nová
+      </Button>
+      <Button
+        variant="outline"
+        onClick={() => setPreviewVisible((current) => !current)}
+      >
+        {previewVisible ? (
+          <EyeOffIcon data-icon="inline-start" />
+        ) : (
+          <EyeIcon data-icon="inline-start" />
+        )}
+        {previewVisible ? "Skrýt náhled" : "Náhled"}
       </Button>
       <Button onClick={handleSaveInvoice} disabled={syncing || !authReady}>
         <SaveIcon data-icon="inline-start" />
@@ -582,7 +627,13 @@ function App() {
 
   return (
     <AppShell actions={editorActions} userEmail={user.email}>
-      <main className="mx-auto grid max-w-[1800px] grid-cols-1 gap-4 p-4 lg:grid-cols-[minmax(300px,360px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(320px,380px)_minmax(560px,1fr)_minmax(520px,680px)]">
+      <main
+        className={
+          previewVisible
+            ? "mx-auto grid max-w-[1800px] grid-cols-1 gap-4 p-4 lg:grid-cols-[minmax(300px,360px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(320px,380px)_minmax(560px,1fr)_minmax(520px,680px)]"
+            : "mx-auto grid max-w-[1400px] grid-cols-1 gap-4 p-4 lg:grid-cols-[minmax(300px,360px)_minmax(0,1fr)]"
+        }
+      >
         <div className="no-print flex h-fit flex-col gap-4 lg:sticky lg:top-24">
           <Card>
             <CardHeader>
@@ -650,9 +701,7 @@ function App() {
                               size="icon"
                               variant="outline"
                               aria-label={`Přidat: ${item.name}`}
-                              onClick={() =>
-                                addLine(createLineFromPriceItem(item))
-                              }
+                              onClick={() => addPriceItem(item)}
                             >
                               <PlusIcon data-icon="inline-start" />
                             </Button>
@@ -966,9 +1015,15 @@ function App() {
           </CardContent>
         </Card>
 
-        <section className="invoice-stage lg:col-span-2 2xl:col-span-1">
-          <InvoiceDocument draft={draft} qrDataUrl={qrDataUrl} total={total} />
-        </section>
+        {previewVisible ? (
+          <section className="invoice-stage lg:col-span-2 2xl:col-span-1">
+            <InvoiceDocument
+              draft={draft}
+              qrDataUrl={qrDataUrl}
+              total={total}
+            />
+          </section>
+        ) : null}
       </main>
     </AppShell>
   )
@@ -1038,7 +1093,7 @@ function AuthCard({
   missingEnv: string[]
   onEmailChange: (value: string) => void
   onPasswordChange: (value: string) => void
-  onSubmit: (mode: "sign-in" | "sign-up") => void
+  onSubmit: () => void
   password: string
 }) {
   const hasMissingEnv = missingEnv.length > 0
@@ -1066,7 +1121,7 @@ function AuthCard({
           className="flex flex-col gap-4"
           onSubmit={(event) => {
             event.preventDefault()
-            onSubmit("sign-in")
+            onSubmit()
           }}
         >
           <FieldGroup>
@@ -1097,20 +1152,10 @@ function AuthCard({
               />
             </Field>
           </FieldGroup>
-          <div className="grid grid-cols-2 gap-2">
-            <Button type="submit" disabled={isLoading || hasMissingEnv}>
-              <CloudIcon data-icon="inline-start" />
-              Přihlásit
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={isLoading || hasMissingEnv}
-              onClick={() => onSubmit("sign-up")}
-            >
-              Vytvořit účet
-            </Button>
-          </div>
+          <Button type="submit" disabled={isLoading || hasMissingEnv}>
+            <CloudIcon data-icon="inline-start" />
+            Přihlásit
+          </Button>
         </form>
       </CardContent>
     </Card>
