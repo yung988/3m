@@ -84,6 +84,7 @@ import {
 } from "@/lib/invoice"
 import {
   deleteInvoice,
+  getNextInvoiceNumber,
   listInvoices,
   loadInvoice,
   markInvoiceExported,
@@ -561,13 +562,19 @@ function App() {
     }
   }
 
-  function handleNewInvoice() {
-    setDraft(createDefaultDraft())
+  async function handleNewInvoice() {
+    const nextDraft = createDefaultDraft()
+    try {
+      nextDraft.invoiceNumber = await getNextInvoiceNumber()
+    } catch {
+      // fallback — already set in createDefaultDraft
+    }
+    setDraft(nextDraft)
     setView("editor")
     setPreviewVisible(false)
     setMessage({
       title: "Nová faktura",
-      description: "Editor je připravený pro další doklad.",
+      description: `Editor je připravený pro doklad ${nextDraft.invoiceNumber}.`,
     })
   }
 

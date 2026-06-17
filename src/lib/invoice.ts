@@ -139,7 +139,7 @@ export function createDefaultDraft(): InvoiceDraft {
   due.setDate(due.getDate() + 21)
 
   return {
-    invoiceNumber: `${new Date().getFullYear()}0015`,
+    invoiceNumber: `${new Date().getFullYear()}0021`,
     issueDate,
     dueDate: toDateInput(due),
     projectTitle: "",

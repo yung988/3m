@@ -217,6 +217,32 @@ function fromInvoiceRow(row: InvoiceWithLines): InvoiceDraft {
   }
 }
 
+export async function getNextInvoiceNumber(): Promise<string> {
+  const supabase = getSupabaseClient()
+  const year = String(new Date().getFullYear())
+  const { data, error } = await supabase
+    .from("invoices")
+    .select("invoice_number")
+
+  if (error || !data) {
+    return `${year}0021`
+  }
+
+  let max = 0
+  for (const row of data) {
+    const num = row.invoice_number
+    if (num.startsWith(year)) {
+      const seq = parseInt(num.slice(year.length), 10)
+      if (!isNaN(seq) && seq > max) {
+        max = seq
+      }
+    }
+  }
+
+  const next = max > 0 ? max + 1 : 21
+  return `${year}${String(next).padStart(4, "0")}`
+}
+
 async function getNextExportCount(id: string) {
   const supabase = getSupabaseClient()
   const { data, error } = await supabase
