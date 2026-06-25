@@ -8,22 +8,31 @@ import {
 import type { Session } from "@supabase/supabase-js"
 import * as QRCode from "qrcode"
 import {
+  ArrowDownIcon,
+  ArrowUpIcon,
+  ArrowUpDownIcon,
   BanknoteIcon,
   CheckCircle2Icon,
   CircleDollarSignIcon,
   CloudIcon,
+  CopyIcon,
+  EllipsisIcon,
   EyeIcon,
   EyeOffIcon,
   FilePlus2Icon,
   LayoutDashboardIcon,
   LogOutIcon,
   MinusIcon,
+  PencilIcon,
   PlusCircleIcon,
   PlusIcon,
   PrinterIcon,
   RotateCcwIcon,
   SaveIcon,
+  SearchIcon,
+  ShoppingCartIcon,
   Trash2Icon,
+  XIcon,
 } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -37,6 +46,22 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Field, FieldGroup, FieldLabel, FieldSet } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import {
@@ -578,56 +603,122 @@ function App() {
     })
   }
 
+  async function handleDuplicateInvoice(id: string) {
+    try {
+      setSyncing(true)
+      const loaded = await loadInvoice(id)
+      let nextNumber = loaded.invoiceNumber
+      try {
+        nextNumber = await getNextInvoiceNumber()
+      } catch {
+        // fallback
+      }
+      const issueDate = new Date().toISOString().slice(0, 10)
+      const due = new Date()
+      due.setDate(due.getDate() + 21)
+      setDraft({
+        ...loaded,
+        id: undefined,
+        invoiceNumber: nextNumber,
+        issueDate,
+        dueDate: due.toISOString().slice(0, 10),
+        status: "draft",
+        paidAt: null,
+        exportedAt: null,
+        exportCount: 0,
+      })
+      setView("editor")
+      setPreviewVisible(false)
+      setMessage({
+        title: "Faktura duplikována",
+        description: `Kopie dokladu je připravená v editoru jako ${nextNumber}.`,
+      })
+    } catch (error) {
+      showError("Duplikování faktury selhalo", error)
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   const dashboardActions = user ? (
     <>
       <Button onClick={handleNewInvoice}>
         <PlusCircleIcon data-icon="inline-start" />
-        Nová faktura
+        <span className="hidden sm:inline">Nová faktura</span>
+        <span className="sm:hidden">Nová</span>
       </Button>
-      <Button variant="outline" onClick={handleSignOut}>
-        <LogOutIcon data-icon="inline-start" />
-        Odhlásit
-      </Button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button variant="outline" size="icon" onClick={handleSignOut}>
+            <LogOutIcon />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Odhlásit</TooltipContent>
+      </Tooltip>
     </>
   ) : null
 
   const editorActions = user ? (
     <>
-      <Button variant="outline" onClick={() => setView("dashboard")}>
-        <LayoutDashboardIcon data-icon="inline-start" />
-        Přehled
-      </Button>
-      <Button variant="outline" onClick={handleNewInvoice}>
-        <PlusCircleIcon data-icon="inline-start" />
-        Nová
-      </Button>
-      <Button
-        variant="outline"
-        onClick={() => setPreviewVisible((current) => !current)}
-      >
-        {previewVisible ? (
-          <EyeOffIcon data-icon="inline-start" />
-        ) : (
-          <EyeIcon data-icon="inline-start" />
-        )}
-        {previewVisible ? "Skrýt náhled" : "Náhled"}
-      </Button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setView("dashboard")}
+          >
+            <LayoutDashboardIcon />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Přehled faktur</TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button variant="outline" size="icon" onClick={handleNewInvoice}>
+            <PlusCircleIcon />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Nová faktura</TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setPreviewVisible((current) => !current)}
+          >
+            {previewVisible ? <EyeOffIcon /> : <EyeIcon />}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>
+          {previewVisible ? "Skrýt náhled" : "Zobrazit náhled"}
+        </TooltipContent>
+      </Tooltip>
       <Button onClick={handleSaveInvoice} disabled={syncing || !authReady}>
         <SaveIcon data-icon="inline-start" />
-        {syncing ? "Ukládám" : "Uložit"}
-      </Button>
-      <Button variant="outline" onClick={resetDraft}>
-        <RotateCcwIcon data-icon="inline-start" />
-        Reset
+        {syncing ? "Ukládám…" : "Uložit"}
       </Button>
       <Button onClick={handleExportInvoice} disabled={syncing}>
         <PrinterIcon data-icon="inline-start" />
-        Export / PDF
+        <span className="hidden sm:inline">Export / PDF</span>
+        <span className="sm:hidden">PDF</span>
       </Button>
-      <Button variant="outline" onClick={handleSignOut}>
-        <LogOutIcon data-icon="inline-start" />
-        Odhlásit
-      </Button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button variant="outline" size="icon" onClick={resetDraft}>
+            <RotateCcwIcon />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Reset faktury</TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button variant="outline" size="icon" onClick={handleSignOut}>
+            <LogOutIcon />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Odhlásit</TooltipContent>
+      </Tooltip>
     </>
   ) : null
 
@@ -670,19 +761,18 @@ function App() {
   if (view === "dashboard") {
     return (
       <AppShell actions={dashboardActions} userEmail={user.email}>
-        <main className="mx-auto flex max-w-[1200px] flex-col gap-4 p-4">
+        <main className="mx-auto flex max-w-[1400px] flex-col gap-4 p-4">
           {message ? <MessageAlert message={message} /> : null}
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.35fr)]">
-            <InvoiceStatsCard invoices={savedInvoices} />
-            <SavedInvoicesCard
-              activeInvoiceId={draft.id}
-              invoices={savedInvoices}
-              isLoading={savedInvoicesLoading}
-              onDelete={handleDeleteInvoice}
-              onLoad={handleLoadInvoice}
-              onTogglePaid={handleTogglePaid}
-            />
-          </div>
+          <InvoiceStatsCard invoices={savedInvoices} />
+          <SavedInvoicesCard
+            activeInvoiceId={draft.id}
+            invoices={savedInvoices}
+            isLoading={savedInvoicesLoading}
+            onDelete={handleDeleteInvoice}
+            onDuplicate={handleDuplicateInvoice}
+            onLoad={handleLoadInvoice}
+            onTogglePaid={handleTogglePaid}
+          />
         </main>
       </AppShell>
     )
@@ -691,157 +781,31 @@ function App() {
   return (
     <AppShell actions={editorActions} userEmail={user.email}>
       <main className="mx-auto grid max-w-[1400px] grid-cols-1 gap-4 p-4 lg:grid-cols-[minmax(300px,360px)_minmax(0,1fr)]">
-        <div className="no-print flex h-fit flex-col gap-4 lg:sticky lg:top-24">
-          <Card>
-            <CardHeader>
-              <CardTitle>Ceník úkonů</CardTitle>
-              <CardDescription>
-                Položka se přidá na fakturu jedním kliknutím.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-4">
-              <FieldGroup>
-                <Field>
-                  <FieldLabel htmlFor="price-search">Hledat</FieldLabel>
-                  <Input
-                    id="price-search"
-                    value={search}
-                    placeholder="např. SSR, doprava, EMR"
-                    onChange={(event) => setSearch(event.target.value)}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel>Kategorie</FieldLabel>
-                  <Select
-                    value={selectedCategory}
-                    onValueChange={setSelectedCategory}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Vybrat kategorii" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        <SelectItem value="all">Všechny položky</SelectItem>
-                        {priceCategories.map((category) => (
-                          <SelectItem key={category} value={category}>
-                            {category}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                </Field>
-              </FieldGroup>
-
-              <div className="max-h-[62svh] overflow-y-auto pr-1">
-                {filteredItems.length > 0 ? (
-                  <ul className="flex flex-col">
-                    {filteredItems.map(({ item, selectedLine }) => {
-                      const isSelected = Boolean(selectedLine)
-
-                      return (
-                        <li
-                          key={item.id}
-                          className={cn(
-                            "grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b px-2 py-3 last:border-b-0",
-                            isSelected && "bg-muted/45"
-                          )}
-                        >
-                          <div className="min-w-0">
-                            <p className="text-sm leading-snug font-medium">
-                              {item.name}
-                            </p>
-                            <div className="mt-2 flex flex-wrap items-center gap-2">
-                              <Badge variant="outline">{item.sourceUnit}</Badge>
-                              <span className="text-sm text-muted-foreground">
-                                {formatCurrency(item.price)}
-                              </span>
-                              {selectedLine ? (
-                                <Badge variant="secondary">na faktuře</Badge>
-                              ) : null}
-                            </div>
-                          </div>
-                          {selectedLine ? (
-                            <div className="flex h-10 shrink-0 items-center gap-1 rounded-md border bg-background p-1">
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    size="icon"
-                                    variant="ghost"
-                                    className="size-8"
-                                    aria-label={`Ubrat: ${item.name}`}
-                                    onClick={() => removePriceItem(item)}
-                                  >
-                                    <MinusIcon data-icon="inline-start" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Ubrat položku</TooltipContent>
-                              </Tooltip>
-                              <span className="min-w-12 text-center text-sm font-semibold tabular-nums">
-                                {formatQuantity(
-                                  selectedLine.quantity,
-                                  item.billingUnit
-                                )}
-                              </span>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    size="icon"
-                                    variant="ghost"
-                                    className="size-8"
-                                    aria-label={`Přidat: ${item.name}`}
-                                    onClick={() => addPriceItem(item)}
-                                  >
-                                    <PlusIcon data-icon="inline-start" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Přidat položku</TooltipContent>
-                              </Tooltip>
-                            </div>
-                          ) : (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  size="icon"
-                                  variant="outline"
-                                  aria-label={`Přidat: ${item.name}`}
-                                  onClick={() => addPriceItem(item)}
-                                >
-                                  <PlusIcon data-icon="inline-start" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Přidat položku</TooltipContent>
-                            </Tooltip>
-                          )}
-                        </li>
-                      )
-                    })}
-                  </ul>
-                ) : (
-                  <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-                    Nic nenalezeno. Zkus kratší hledaný výraz nebo jinou
-                    kategorii.
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card className="no-print h-fit">
+        {/* Invoice form — DOM first so mobile shows it before the price list */}
+        <Card className="no-print h-fit lg:order-2">
           <CardHeader>
             <CardTitle>Rozpis faktury</CardTitle>
             <CardDescription>
               Čísla a texty se ukládají do Supabase po kliknutí na Uložit.
             </CardDescription>
             <CardAction>
-              <Button
-                variant="outline"
-                onClick={() => addLine(createEmptyLine())}
-              >
-                <FilePlus2Icon data-icon="inline-start" />
-                Vlastní položka
-              </Button>
+              <div className="flex gap-2">
+                <a
+                  href="#cenik-sekce"
+                  className="lg:hidden inline-flex h-8 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium hover:bg-muted"
+                >
+                  <ShoppingCartIcon className="size-4" />
+                  Ceník
+                </a>
+                <Button
+                  variant="outline"
+                  onClick={() => addLine(createEmptyLine())}
+                >
+                  <FilePlus2Icon data-icon="inline-start" />
+                  <span className="hidden sm:inline">Vlastní položka</span>
+                  <span className="sm:hidden">Vlastní</span>
+                </Button>
+              </div>
             </CardAction>
           </CardHeader>
           <CardContent className="flex flex-col gap-5">
@@ -853,7 +817,7 @@ function App() {
             ) : null}
 
             <FieldSet>
-              <FieldGroup className="grid gap-4 md:grid-cols-4">
+              <FieldGroup className="grid gap-4 grid-cols-2 md:grid-cols-4">
                 <Field>
                   <FieldLabel htmlFor="invoice-number">
                     Číslo faktury
@@ -867,7 +831,7 @@ function App() {
                   />
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor="issue-date">Datum vystavení</FieldLabel>
+                  <FieldLabel htmlFor="issue-date">Vystaveno</FieldLabel>
                   <Input
                     id="issue-date"
                     type="date"
@@ -878,7 +842,7 @@ function App() {
                   />
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor="due-date">Datum splatnosti</FieldLabel>
+                  <FieldLabel htmlFor="due-date">Splatnost</FieldLabel>
                   <Input
                     id="due-date"
                     type="date"
@@ -939,7 +903,7 @@ function App() {
               </FieldGroup>
             </FieldSet>
 
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid gap-3 grid-cols-2">
               <div className="rounded-lg border bg-card p-3">
                 <div className="flex items-center gap-2 text-sm font-medium">
                   <BanknoteIcon data-icon="inline-start" />
@@ -958,11 +922,8 @@ function App() {
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {draft.exportedAt
-                    ? `Exportováno ${formatDateTime(draft.exportedAt)}`
+                    ? `${formatDateTime(draft.exportedAt)}`
                     : "Neexportováno"}
-                </p>
-                <p className="mt-1 truncate text-xs text-muted-foreground">
-                  {exportFileName}
                 </p>
               </div>
             </div>
@@ -993,7 +954,7 @@ function App() {
                   />
                 </Field>
               </FieldGroup>
-              <FieldGroup className="grid gap-4 md:grid-cols-2">
+              <FieldGroup className="grid gap-4 grid-cols-2">
                 <Field>
                   <FieldLabel htmlFor="customer-id">IČO</FieldLabel>
                   <Input
@@ -1024,93 +985,185 @@ function App() {
                 <h2 className="text-base font-medium">Položky</h2>
                 <Badge variant="secondary">{draft.lines.length} položek</Badge>
               </div>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="min-w-80">Popis</TableHead>
-                    <TableHead className="w-24 text-right">Množství</TableHead>
-                    <TableHead className="w-20">Jedn.</TableHead>
-                    <TableHead className="w-32 text-right">Cena</TableHead>
-                    <TableHead className="w-32 text-right">Celkem</TableHead>
-                    <TableHead className="w-12" />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+
+              {draft.lines.length === 0 ? (
+                <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
+                  Přidej položku z ceníku nebo vlastní řádek.
+                </div>
+              ) : null}
+
+              {/* Mobile: card per line item */}
+              {draft.lines.length > 0 ? (
+                <div className="flex flex-col gap-3 md:hidden">
                   {draft.lines.map((line) => (
-                    <TableRow key={line.id}>
-                      <TableCell className="min-w-80 whitespace-normal">
+                    <div
+                      key={line.id}
+                      className="flex flex-col gap-3 rounded-lg border p-3"
+                    >
+                      <div className="flex items-start gap-2">
                         <Textarea
                           value={line.description}
-                          className="min-h-16 resize-y"
+                          className="min-h-14 flex-1 resize-y text-sm"
                           onChange={(event) =>
                             updateLine(line.id, {
                               description: event.target.value,
                             })
                           }
                         />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          inputMode="decimal"
-                          value={line.quantity}
-                          className="text-right"
-                          onChange={(event) =>
-                            updateLine(line.id, {
-                              quantity: normalizeMoneyInput(event.target.value),
-                            })
-                          }
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          value={line.unitLabel}
-                          placeholder="ks"
-                          onChange={(event) =>
-                            updateLine(line.id, {
-                              unitLabel: event.target.value,
-                            })
-                          }
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          inputMode="decimal"
-                          value={line.unitPrice}
-                          className="text-right"
-                          onChange={(event) =>
-                            updateLine(line.id, {
-                              unitPrice: normalizeMoneyInput(
-                                event.target.value
-                              ),
-                            })
-                          }
-                        />
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="shrink-0"
+                          aria-label="Odebrat položku"
+                          onClick={() => removeLine(line.id)}
+                        >
+                          <Trash2Icon className="size-4" />
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <Field>
+                          <FieldLabel>Množství</FieldLabel>
+                          <Input
+                            inputMode="decimal"
+                            value={line.quantity}
+                            className="text-right"
+                            onChange={(event) =>
+                              updateLine(line.id, {
+                                quantity: normalizeMoneyInput(event.target.value),
+                              })
+                            }
+                          />
+                        </Field>
+                        <Field>
+                          <FieldLabel>Jedn.</FieldLabel>
+                          <Input
+                            value={line.unitLabel}
+                            placeholder="ks"
+                            onChange={(event) =>
+                              updateLine(line.id, {
+                                unitLabel: event.target.value,
+                              })
+                            }
+                          />
+                        </Field>
+                        <Field>
+                          <FieldLabel>Cena / j.</FieldLabel>
+                          <Input
+                            inputMode="decimal"
+                            value={line.unitPrice}
+                            className="text-right"
+                            onChange={(event) =>
+                              updateLine(line.id, {
+                                unitPrice: normalizeMoneyInput(
+                                  event.target.value
+                                ),
+                              })
+                            }
+                          />
+                        </Field>
+                      </div>
+                      <p className="text-right text-sm font-medium">
+                        Celkem:{" "}
                         {formatCurrency(line.quantity * line.unitPrice)}
-                      </TableCell>
-                      <TableCell>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              aria-label="Odebrat položku"
-                              onClick={() => removeLine(line.id)}
-                            >
-                              <Trash2Icon data-icon="inline-start" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Odebrat</TooltipContent>
-                        </Tooltip>
-                      </TableCell>
-                    </TableRow>
+                      </p>
+                    </div>
                   ))}
-                </TableBody>
-              </Table>
-              {draft.lines.length === 0 ? (
-                <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-                  Přidej položku z ceníku nebo vlastní řádek.
+                </div>
+              ) : null}
+
+              {/* Desktop: table */}
+              {draft.lines.length > 0 ? (
+                <div className="hidden md:block">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="min-w-80">Popis</TableHead>
+                        <TableHead className="w-24 text-right">
+                          Množství
+                        </TableHead>
+                        <TableHead className="w-20">Jedn.</TableHead>
+                        <TableHead className="w-32 text-right">Cena</TableHead>
+                        <TableHead className="w-32 text-right">
+                          Celkem
+                        </TableHead>
+                        <TableHead className="w-12" />
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {draft.lines.map((line) => (
+                        <TableRow key={line.id}>
+                          <TableCell className="min-w-80 whitespace-normal">
+                            <Textarea
+                              value={line.description}
+                              className="min-h-16 resize-y"
+                              onChange={(event) =>
+                                updateLine(line.id, {
+                                  description: event.target.value,
+                                })
+                              }
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              inputMode="decimal"
+                              value={line.quantity}
+                              className="text-right"
+                              onChange={(event) =>
+                                updateLine(line.id, {
+                                  quantity: normalizeMoneyInput(
+                                    event.target.value
+                                  ),
+                                })
+                              }
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              value={line.unitLabel}
+                              placeholder="ks"
+                              onChange={(event) =>
+                                updateLine(line.id, {
+                                  unitLabel: event.target.value,
+                                })
+                              }
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              inputMode="decimal"
+                              value={line.unitPrice}
+                              className="text-right"
+                              onChange={(event) =>
+                                updateLine(line.id, {
+                                  unitPrice: normalizeMoneyInput(
+                                    event.target.value
+                                  ),
+                                })
+                              }
+                            />
+                          </TableCell>
+                          <TableCell className="text-right font-medium">
+                            {formatCurrency(line.quantity * line.unitPrice)}
+                          </TableCell>
+                          <TableCell>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  aria-label="Odebrat položku"
+                                  onClick={() => removeLine(line.id)}
+                                >
+                                  <Trash2Icon data-icon="inline-start" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Odebrat</TooltipContent>
+                            </Tooltip>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 </div>
               ) : null}
             </div>
@@ -1123,6 +1176,140 @@ function App() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Price list — DOM second so mobile shows it after the form */}
+        <div
+          id="cenik-sekce"
+          className="no-print flex h-fit flex-col gap-4 scroll-mt-20 lg:order-1 lg:sticky lg:top-24"
+        >
+          <Card>
+            <CardHeader>
+              <CardTitle>Ceník úkonů</CardTitle>
+              <CardDescription>
+                Položka se přidá na fakturu jedním kliknutím.
+              </CardDescription>
+              <CardAction>
+                <a
+                  href="#invoice-number"
+                  className="lg:hidden inline-flex h-8 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium hover:bg-muted"
+                >
+                  ↑ Zpět
+                </a>
+              </CardAction>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              <FieldGroup>
+                <Field>
+                  <FieldLabel htmlFor="price-search">Hledat</FieldLabel>
+                  <Input
+                    id="price-search"
+                    value={search}
+                    placeholder="např. SSR, doprava, EMR"
+                    onChange={(event) => setSearch(event.target.value)}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel>Kategorie</FieldLabel>
+                  <Select
+                    value={selectedCategory}
+                    onValueChange={setSelectedCategory}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Vybrat kategorii" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem value="all">Všechny položky</SelectItem>
+                        {priceCategories.map((category) => (
+                          <SelectItem key={category} value={category}>
+                            {category}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </Field>
+              </FieldGroup>
+
+              <div className="lg:max-h-[62svh] lg:overflow-y-auto pr-1">
+                {filteredItems.length > 0 ? (
+                  <ul className="flex flex-col">
+                    {filteredItems.map(({ item, selectedLine }) => {
+                      const isSelected = Boolean(selectedLine)
+
+                      return (
+                        <li
+                          key={item.id}
+                          className={cn(
+                            "grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b px-2 py-3 last:border-b-0",
+                            isSelected && "bg-muted/45"
+                          )}
+                        >
+                          <div className="min-w-0">
+                            <p className="text-sm leading-snug font-medium">
+                              {item.name}
+                            </p>
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              <Badge variant="outline">{item.sourceUnit}</Badge>
+                              <span className="text-sm text-muted-foreground">
+                                {formatCurrency(item.price)}
+                              </span>
+                              {selectedLine ? (
+                                <Badge variant="secondary">na faktuře</Badge>
+                              ) : null}
+                            </div>
+                          </div>
+                          {selectedLine ? (
+                            <div className="flex h-10 shrink-0 items-center gap-1 rounded-md border bg-background p-1">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="size-8"
+                                aria-label={`Ubrat: ${item.name}`}
+                                onClick={() => removePriceItem(item)}
+                              >
+                                <MinusIcon data-icon="inline-start" />
+                              </Button>
+                              <span className="min-w-12 text-center text-sm font-semibold tabular-nums">
+                                {formatQuantity(
+                                  selectedLine.quantity,
+                                  item.billingUnit
+                                )}
+                              </span>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="size-8"
+                                aria-label={`Přidat: ${item.name}`}
+                                onClick={() => addPriceItem(item)}
+                              >
+                                <PlusIcon data-icon="inline-start" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <Button
+                              size="icon"
+                              variant="outline"
+                              aria-label={`Přidat: ${item.name}`}
+                              onClick={() => addPriceItem(item)}
+                            >
+                              <PlusIcon data-icon="inline-start" />
+                            </Button>
+                          )}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                ) : (
+                  <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
+                    Nic nenalezeno. Zkus kratší hledaný výraz nebo jinou
+                    kategorii.
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </main>
       {previewVisible ? (
         <InvoicePreviewOverlay
@@ -1150,26 +1337,25 @@ function AppShell({
 }) {
   return (
     <div className="min-h-svh bg-background text-foreground">
-      <header className="no-print sticky top-0 border-b bg-background/95 backdrop-blur">
-        <div className="mx-auto flex max-w-[1800px] flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl leading-tight font-semibold">
+      <header className="no-print sticky top-0 z-30 border-b bg-background/95 backdrop-blur">
+        <div className="mx-auto flex max-w-[1800px] items-center justify-between gap-3 px-4 py-3">
+          <div className="min-w-0 shrink">
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg leading-tight font-semibold sm:text-2xl">
                 Faktury pro Štěpu
               </h1>
-              <Badge variant="secondary">3M ENERGY</Badge>
+              <Badge variant="secondary" className="hidden sm:inline-flex">
+                3M ENERGY
+              </Badge>
             </div>
-            <p className="text-sm text-muted-foreground">
-              Přehled faktur, stav plateb a rychlé vytvoření PDF.
-            </p>
+            {userEmail ? (
+              <p className="truncate text-xs text-muted-foreground sm:text-sm">
+                {userEmail}
+              </p>
+            ) : null}
           </div>
-          {actions || userEmail ? (
-            <div className="flex flex-wrap gap-2">
-              {userEmail ? (
-                <Badge variant="outline" className="h-8 max-w-56 truncate px-3">
-                  {userEmail}
-                </Badge>
-              ) : null}
+          {actions ? (
+            <div className="flex shrink-0 items-center gap-2 overflow-x-auto">
               {actions}
             </div>
           ) : null}
@@ -1344,11 +1530,68 @@ function StatTile({
   )
 }
 
+type SortKey =
+  | "invoice_number"
+  | "customer_name"
+  | "issue_date"
+  | "due_date"
+  | "total_amount"
+  | "status"
+  | "exported_at"
+
+type SortDir = "asc" | "desc"
+
+const statusVariant: Record<
+  InvoiceStatus,
+  "default" | "secondary" | "outline" | "destructive"
+> = {
+  draft: "outline",
+  issued: "secondary",
+  paid: "default",
+  overdue: "destructive",
+  cancelled: "outline",
+}
+
+function SortHeader({
+  label,
+  sortKey,
+  current,
+  dir,
+  onSort,
+}: {
+  label: string
+  sortKey: SortKey
+  current: SortKey
+  dir: SortDir
+  onSort: (key: SortKey) => void
+}) {
+  const active = current === sortKey
+  return (
+    <button
+      type="button"
+      className="flex items-center gap-1 font-medium hover:text-foreground"
+      onClick={() => onSort(sortKey)}
+    >
+      {label}
+      {active ? (
+        dir === "asc" ? (
+          <ArrowUpIcon className="size-3.5" />
+        ) : (
+          <ArrowDownIcon className="size-3.5" />
+        )
+      ) : (
+        <ArrowUpDownIcon className="size-3.5 opacity-40" />
+      )}
+    </button>
+  )
+}
+
 function SavedInvoicesCard({
   activeInvoiceId,
   invoices,
   isLoading,
   onDelete,
+  onDuplicate,
   onLoad,
   onTogglePaid,
 }: {
@@ -1356,114 +1599,393 @@ function SavedInvoicesCard({
   invoices: InvoiceSummary[]
   isLoading: boolean
   onDelete: (id: string) => void
+  onDuplicate: (id: string) => void
   onLoad: (id: string) => void
   onTogglePaid: (id: string, isPaid: boolean) => void
 }) {
+  const [search, setSearch] = useState("")
+  const [sortKey, setSortKey] = useState<SortKey>("issue_date")
+  const [sortDir, setSortDir] = useState<SortDir>("desc")
+
+  function handleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"))
+    } else {
+      setSortKey(key)
+      setSortDir("desc")
+    }
+  }
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLocaleLowerCase("cs-CZ")
+    const list = q
+      ? invoices.filter(
+          (inv) =>
+            inv.invoice_number.toLocaleLowerCase("cs-CZ").includes(q) ||
+            (inv.customer_name ?? "").toLocaleLowerCase("cs-CZ").includes(q) ||
+            statusLabels[inv.status as InvoiceStatus]
+              ?.toLocaleLowerCase("cs-CZ")
+              .includes(q)
+        )
+      : invoices
+
+    return [...list].sort((a, b) => {
+      let av: string | number = ""
+      let bv: string | number = ""
+
+      if (sortKey === "total_amount") {
+        av = Number(a.total_amount) || 0
+        bv = Number(b.total_amount) || 0
+      } else {
+        av = (a[sortKey] ?? "") as string
+        bv = (b[sortKey] ?? "") as string
+      }
+
+      const cmp =
+        typeof av === "number"
+          ? av - bv
+          : (av as string).localeCompare(bv as string, "cs-CZ")
+
+      return sortDir === "asc" ? cmp : -cmp
+    })
+  }, [invoices, search, sortKey, sortDir])
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>Uložené faktury</CardTitle>
         <CardDescription>
-          Doklady uložené pod přihlášeným účtem.
+          Kliknutí otevře fakturu v editoru. Pravé tlačítko myši zobrazí
+          možnosti.
         </CardDescription>
+        <CardAction>
+          <Badge variant="secondary">{invoices.length} faktur</Badge>
+        </CardAction>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
+        <div className="relative">
+          <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="pl-8 pr-8"
+            placeholder="Hledat fakturu, odběratele, stav…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          {search ? (
+            <button
+              type="button"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              aria-label="Vymazat hledání"
+              onClick={() => setSearch("")}
+            >
+              <XIcon className="size-4" />
+            </button>
+          ) : null}
+        </div>
+
         {isLoading ? (
-          <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+          <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
             Načítám faktury…
           </div>
         ) : invoices.length === 0 ? (
-          <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+          <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
             Zatím nic uloženého. Klikni na Nová faktura a vytvoř první doklad.
           </div>
+        ) : filtered.length === 0 ? (
+          <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
+            Žádná faktura neodpovídá hledání.
+          </div>
         ) : (
-          <ul className="flex max-h-[60svh] flex-col overflow-y-auto">
-            {invoices.map((invoice) => (
-              <li
-                key={invoice.id}
-                className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 border-b py-3 last:border-b-0"
-              >
-                <button
-                  className="min-w-0 rounded-lg p-2 text-left hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
-                  type="button"
-                  onClick={() => onLoad(invoice.id)}
-                >
-                  <span className="flex items-center gap-2">
-                    <span className="truncate text-sm font-medium">
-                      {invoice.invoice_number}
-                    </span>
-                    {activeInvoiceId === invoice.id ? (
-                      <Badge variant="secondary">otevřená</Badge>
-                    ) : null}
-                  </span>
-                  <span className="mt-1 block truncate text-sm text-muted-foreground">
-                    {invoice.customer_name || "Bez odběratele"} ·{" "}
-                    {formatCurrency(Number(invoice.total_amount))}
-                  </span>
-                  <span className="mt-2 flex flex-wrap gap-1">
-                    <Badge
-                      variant={
-                        invoice.status === "paid" ? "default" : "outline"
-                      }
+          <>
+            {/* Mobile: card list */}
+            <ul className="flex flex-col gap-2 md:hidden">
+              {filtered.map((invoice) => {
+                const isPaid = invoice.status === "paid"
+                const isActive = activeInvoiceId === invoice.id
+                return (
+                  <li
+                    key={invoice.id}
+                    className={cn(
+                      "rounded-lg border bg-card",
+                      isActive && "border-primary/40 bg-primary/5"
+                    )}
+                  >
+                    <button
+                      type="button"
+                      className="w-full p-3 text-left"
+                      onClick={() => onLoad(invoice.id)}
                     >
-                      {invoice.status === "paid" ? "zaplaceno" : "nezaplaceno"}
-                    </Badge>
-                    <Badge
-                      variant={invoice.exported_at ? "secondary" : "outline"}
-                    >
-                      {invoice.exported_at ? "exportováno" : "neexportováno"}
-                    </Badge>
-                    <Badge variant="outline">
-                      {statusLabels[invoice.status as InvoiceStatus]}
-                    </Badge>
-                  </span>
-                  {invoice.exported_at ? (
-                    <span className="mt-1 block text-xs text-muted-foreground">
-                      Export: {formatDateTime(invoice.exported_at)}
-                    </span>
-                  ) : null}
-                </button>
-                <div className="flex flex-col gap-1">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="font-medium leading-tight">
+                          {invoice.invoice_number}
+                        </span>
+                        <span className="shrink-0 font-semibold tabular-nums">
+                          {formatCurrency(Number(invoice.total_amount))}
+                        </span>
+                      </div>
+                      <p className="mt-1 truncate text-sm text-muted-foreground">
+                        {invoice.customer_name || "Bez odběratele"}
+                      </p>
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        <Badge
+                          variant={
+                            statusVariant[invoice.status as InvoiceStatus] ??
+                            "outline"
+                          }
+                        >
+                          {statusLabels[invoice.status as InvoiceStatus] ??
+                            invoice.status}
+                        </Badge>
+                        {invoice.exported_at ? (
+                          <Badge variant="secondary">exportováno</Badge>
+                        ) : null}
+                        {isActive ? (
+                          <Badge variant="secondary">otevřená</Badge>
+                        ) : null}
+                        <span className="text-xs text-muted-foreground tabular-nums">
+                          {invoice.issue_date
+                            ? formatDate(invoice.issue_date)
+                            : null}
+                        </span>
+                      </div>
+                    </button>
+                    <div className="flex items-center gap-1 border-t px-3 py-2">
                       <Button
-                        aria-label={
-                          invoice.status === "paid"
-                            ? `Označit fakturu ${invoice.invoice_number} jako nezaplacenou`
-                            : `Označit fakturu ${invoice.invoice_number} jako zaplacenou`
-                        }
-                        size="icon"
+                        size="sm"
                         variant="outline"
-                        onClick={() =>
-                          onTogglePaid(invoice.id, invoice.status !== "paid")
-                        }
+                        className="h-9 flex-1"
+                        onClick={() => onLoad(invoice.id)}
                       >
-                        <CheckCircle2Icon data-icon="inline-start" />
+                        <PencilIcon className="size-4" />
+                        Upravit
                       </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      {invoice.status === "paid"
-                        ? "Označit jako nezaplacené"
-                        : "Označit jako zaplacené"}
-                    </TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
                       <Button
-                        aria-label={`Smazat fakturu ${invoice.invoice_number}`}
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => onDelete(invoice.id)}
+                        size="sm"
+                        variant="outline"
+                        className="h-9 flex-1"
+                        onClick={() => onTogglePaid(invoice.id, !isPaid)}
                       >
-                        <Trash2Icon data-icon="inline-start" />
+                        <CheckCircle2Icon className="size-4" />
+                        {isPaid ? "Zaplaceno" : "Zaplatit"}
                       </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Smazat z databáze</TooltipContent>
-                  </Tooltip>
-                </div>
-              </li>
-            ))}
-          </ul>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-9 w-9 shrink-0"
+                            aria-label="Další možnosti"
+                          >
+                            <EllipsisIcon className="size-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                          <DropdownMenuLabel>
+                            {invoice.invoice_number}
+                          </DropdownMenuLabel>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => onDuplicate(invoice.id)}
+                          >
+                            <CopyIcon className="size-4" />
+                            Duplikovat
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            variant="destructive"
+                            onClick={() => onDelete(invoice.id)}
+                          >
+                            <Trash2Icon className="size-4" />
+                            Smazat
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+
+            {/* Desktop: sortable table with context menu */}
+            <div className="hidden overflow-x-auto rounded-lg border md:block">
+              <Table>
+                <TableHeader>
+                  <TableRow className="text-muted-foreground">
+                    <TableHead>
+                      <SortHeader
+                        label="Číslo"
+                        sortKey="invoice_number"
+                        current={sortKey}
+                        dir={sortDir}
+                        onSort={handleSort}
+                      />
+                    </TableHead>
+                    <TableHead>
+                      <SortHeader
+                        label="Odběratel"
+                        sortKey="customer_name"
+                        current={sortKey}
+                        dir={sortDir}
+                        onSort={handleSort}
+                      />
+                    </TableHead>
+                    <TableHead>
+                      <SortHeader
+                        label="Vystaveno"
+                        sortKey="issue_date"
+                        current={sortKey}
+                        dir={sortDir}
+                        onSort={handleSort}
+                      />
+                    </TableHead>
+                    <TableHead>
+                      <SortHeader
+                        label="Splatnost"
+                        sortKey="due_date"
+                        current={sortKey}
+                        dir={sortDir}
+                        onSort={handleSort}
+                      />
+                    </TableHead>
+                    <TableHead className="text-right">
+                      <SortHeader
+                        label="Částka"
+                        sortKey="total_amount"
+                        current={sortKey}
+                        dir={sortDir}
+                        onSort={handleSort}
+                      />
+                    </TableHead>
+                    <TableHead>
+                      <SortHeader
+                        label="Stav"
+                        sortKey="status"
+                        current={sortKey}
+                        dir={sortDir}
+                        onSort={handleSort}
+                      />
+                    </TableHead>
+                    <TableHead>
+                      <SortHeader
+                        label="Export"
+                        sortKey="exported_at"
+                        current={sortKey}
+                        dir={sortDir}
+                        onSort={handleSort}
+                      />
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filtered.map((invoice) => {
+                    const isPaid = invoice.status === "paid"
+                    return (
+                      <ContextMenu key={invoice.id}>
+                        <ContextMenuTrigger asChild>
+                          <TableRow
+                            className="cursor-pointer hover:bg-muted/50 data-[active=true]:bg-muted"
+                            data-active={activeInvoiceId === invoice.id}
+                            onClick={() => onLoad(invoice.id)}
+                          >
+                            <TableCell className="font-medium">
+                              <span className="flex items-center gap-2">
+                                {invoice.invoice_number}
+                                {activeInvoiceId === invoice.id ? (
+                                  <Badge
+                                    variant="secondary"
+                                    className="text-xs"
+                                  >
+                                    otevřená
+                                  </Badge>
+                                ) : null}
+                              </span>
+                            </TableCell>
+                            <TableCell className="max-w-48 truncate">
+                              {invoice.customer_name || (
+                                <span className="text-muted-foreground">
+                                  Bez odběratele
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap tabular-nums">
+                              {invoice.issue_date
+                                ? formatDate(invoice.issue_date)
+                                : "—"}
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap tabular-nums">
+                              {invoice.due_date
+                                ? formatDate(invoice.due_date)
+                                : "—"}
+                            </TableCell>
+                            <TableCell className="text-right font-medium tabular-nums">
+                              {formatCurrency(Number(invoice.total_amount))}
+                            </TableCell>
+                            <TableCell>
+                              <Badge
+                                variant={
+                                  statusVariant[
+                                    invoice.status as InvoiceStatus
+                                  ] ?? "outline"
+                                }
+                              >
+                                {statusLabels[
+                                  invoice.status as InvoiceStatus
+                                ] ?? invoice.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              {invoice.exported_at ? (
+                                <span className="text-xs text-muted-foreground">
+                                  {formatDateTime(invoice.exported_at)}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">
+                                  —
+                                </span>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        </ContextMenuTrigger>
+                        <ContextMenuContent className="w-52">
+                          <ContextMenuLabel>
+                            {invoice.invoice_number}
+                          </ContextMenuLabel>
+                          <ContextMenuSeparator />
+                          <ContextMenuItem onClick={() => onLoad(invoice.id)}>
+                            <PencilIcon className="size-4" />
+                            Otevřít / upravit
+                          </ContextMenuItem>
+                          <ContextMenuItem
+                            onClick={() => onDuplicate(invoice.id)}
+                          >
+                            <CopyIcon className="size-4" />
+                            Duplikovat
+                          </ContextMenuItem>
+                          <ContextMenuSeparator />
+                          <ContextMenuItem
+                            onClick={() => onTogglePaid(invoice.id, !isPaid)}
+                          >
+                            <CheckCircle2Icon className="size-4" />
+                            {isPaid
+                              ? "Označit jako nezaplaceno"
+                              : "Označit jako zaplaceno"}
+                          </ContextMenuItem>
+                          <ContextMenuSeparator />
+                          <ContextMenuItem
+                            variant="destructive"
+                            onClick={() => onDelete(invoice.id)}
+                          >
+                            <Trash2Icon className="size-4" />
+                            Smazat
+                          </ContextMenuItem>
+                        </ContextMenuContent>
+                      </ContextMenu>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          </>
         )}
       </CardContent>
     </Card>
