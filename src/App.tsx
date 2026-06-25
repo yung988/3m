@@ -1532,7 +1532,8 @@ function StatTile({
 
 type SortKey =
   | "invoice_number"
-  | "customer_name"
+  | "project_title"
+  | "project_subtitle"
   | "issue_date"
   | "due_date"
   | "total_amount"
@@ -1622,7 +1623,8 @@ function SavedInvoicesCard({
       ? invoices.filter(
           (inv) =>
             inv.invoice_number.toLocaleLowerCase("cs-CZ").includes(q) ||
-            (inv.customer_name ?? "").toLocaleLowerCase("cs-CZ").includes(q) ||
+            (inv.project_title ?? "").toLocaleLowerCase("cs-CZ").includes(q) ||
+            (inv.project_subtitle ?? "").toLocaleLowerCase("cs-CZ").includes(q) ||
             statusLabels[inv.status as InvoiceStatus]
               ?.toLocaleLowerCase("cs-CZ")
               .includes(q)
@@ -1723,15 +1725,14 @@ function SavedInvoicesCard({
                           {formatCurrency(Number(invoice.total_amount))}
                         </span>
                       </div>
-                      <p className="mt-0.5 truncate text-sm text-muted-foreground">
-                        {invoice.customer_name || "Bez odběratele"}
-                      </p>
                       {invoice.project_title ? (
-                        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                        <p className="mt-0.5 truncate text-sm font-medium">
                           {invoice.project_title}
-                          {invoice.project_subtitle
-                            ? ` · ${invoice.project_subtitle}`
-                            : ""}
+                        </p>
+                      ) : null}
+                      {invoice.project_subtitle ? (
+                        <p className="mt-0 truncate text-xs text-muted-foreground">
+                          {invoice.project_subtitle}
                         </p>
                       ) : null}
                       <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -1830,14 +1831,22 @@ function SavedInvoicesCard({
                     </TableHead>
                     <TableHead>
                       <SortHeader
-                        label="Odběratel"
-                        sortKey="customer_name"
+                        label="Název"
+                        sortKey="project_title"
                         current={sortKey}
                         dir={sortDir}
                         onSort={handleSort}
                       />
                     </TableHead>
-                    <TableHead>Fakturace</TableHead>
+                    <TableHead>
+                      <SortHeader
+                        label="Místo"
+                        sortKey="project_subtitle"
+                        current={sortKey}
+                        dir={sortDir}
+                        onSort={handleSort}
+                      />
+                    </TableHead>
                     <TableHead>
                       <SortHeader
                         label="Vystaveno"
@@ -1909,28 +1918,13 @@ function SavedInvoicesCard({
                                 ) : null}
                               </span>
                             </TableCell>
-                            <TableCell className="max-w-40 truncate">
-                              {invoice.customer_name || (
-                                <span className="text-muted-foreground">
-                                  Bez odběratele
-                                </span>
+                            <TableCell className="max-w-52 truncate">
+                              {invoice.project_title || (
+                                <span className="text-muted-foreground">—</span>
                               )}
                             </TableCell>
-                            <TableCell className="max-w-44">
-                              {invoice.project_title ? (
-                                <span className="block truncate text-sm">
-                                  {invoice.project_title}
-                                </span>
-                              ) : null}
-                              {invoice.project_subtitle ? (
-                                <span className="block truncate text-xs text-muted-foreground">
-                                  {invoice.project_subtitle}
-                                </span>
-                              ) : null}
-                              {!invoice.project_title &&
-                              !invoice.project_subtitle ? (
-                                <span className="text-muted-foreground">—</span>
-                              ) : null}
+                            <TableCell className="max-w-36 truncate text-muted-foreground">
+                              {invoice.project_subtitle || "—"}
                             </TableCell>
                             <TableCell className="whitespace-nowrap tabular-nums">
                               {invoice.issue_date
