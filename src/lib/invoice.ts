@@ -90,12 +90,11 @@ export function formatDateTime(dateInput: string) {
 }
 
 export function buildInvoicePdfFileName(draft: InvoiceDraft) {
-  const location =
-    draft.projectSubtitle || draft.projectTitle || draft.customerName
   const parts = [
-    draft.issueDate,
     `faktura-${draft.invoiceNumber}`,
-    location,
+    draft.projectTitle,
+    draft.projectSubtitle,
+    draft.issueDate,
   ].map(toSafeFileNamePart)
 
   return `${parts.filter(Boolean).join("_") || "faktura"}.pdf`
