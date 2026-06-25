@@ -1643,7 +1643,7 @@ function SavedInvoicesCard({
 
       const cmp =
         typeof av === "number"
-          ? av - bv
+          ? av - (bv as number)
           : (av as string).localeCompare(bv as string, "cs-CZ")
 
       return sortDir === "asc" ? cmp : -cmp
