@@ -1723,9 +1723,17 @@ function SavedInvoicesCard({
                           {formatCurrency(Number(invoice.total_amount))}
                         </span>
                       </div>
-                      <p className="mt-1 truncate text-sm text-muted-foreground">
+                      <p className="mt-0.5 truncate text-sm text-muted-foreground">
                         {invoice.customer_name || "Bez odběratele"}
                       </p>
+                      {invoice.project_title ? (
+                        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                          {invoice.project_title}
+                          {invoice.project_subtitle
+                            ? ` · ${invoice.project_subtitle}`
+                            : ""}
+                        </p>
+                      ) : null}
                       <div className="mt-2 flex flex-wrap items-center gap-1.5">
                         <Badge
                           variant={
@@ -1829,6 +1837,7 @@ function SavedInvoicesCard({
                         onSort={handleSort}
                       />
                     </TableHead>
+                    <TableHead>Fakturace</TableHead>
                     <TableHead>
                       <SortHeader
                         label="Vystaveno"
@@ -1900,12 +1909,28 @@ function SavedInvoicesCard({
                                 ) : null}
                               </span>
                             </TableCell>
-                            <TableCell className="max-w-48 truncate">
+                            <TableCell className="max-w-40 truncate">
                               {invoice.customer_name || (
                                 <span className="text-muted-foreground">
                                   Bez odběratele
                                 </span>
                               )}
+                            </TableCell>
+                            <TableCell className="max-w-44">
+                              {invoice.project_title ? (
+                                <span className="block truncate text-sm">
+                                  {invoice.project_title}
+                                </span>
+                              ) : null}
+                              {invoice.project_subtitle ? (
+                                <span className="block truncate text-xs text-muted-foreground">
+                                  {invoice.project_subtitle}
+                                </span>
+                              ) : null}
+                              {!invoice.project_title &&
+                              !invoice.project_subtitle ? (
+                                <span className="text-muted-foreground">—</span>
+                              ) : null}
                             </TableCell>
                             <TableCell className="whitespace-nowrap tabular-nums">
                               {invoice.issue_date
