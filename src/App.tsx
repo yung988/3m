@@ -99,8 +99,10 @@ import {
   formatCurrency,
   formatDate,
   formatDateTime,
+  formatHoursDisplay,
   formatQuantity,
   normalizeMoneyInput,
+  parseHoursInput,
   payment,
   supplier,
   type InvoiceDraft,
@@ -1022,17 +1024,31 @@ function App() {
                       </div>
                       <div className="grid grid-cols-3 gap-2">
                         <Field>
-                          <FieldLabel>Množství</FieldLabel>
-                          <Input
-                            inputMode="decimal"
-                            value={line.quantity}
-                            className="text-right"
-                            onChange={(event) =>
-                              updateLine(line.id, {
-                                quantity: normalizeMoneyInput(event.target.value),
-                              })
-                            }
-                          />
+                          <FieldLabel>
+                            {line.unitLabel === "hod" ? "h:mm" : "Množství"}
+                          </FieldLabel>
+                          {line.unitLabel === "hod" ? (
+                            <HoursInput
+                              value={line.quantity}
+                              className="text-right"
+                              onChange={(v) =>
+                                updateLine(line.id, { quantity: v })
+                              }
+                            />
+                          ) : (
+                            <Input
+                              inputMode="decimal"
+                              value={line.quantity}
+                              className="text-right"
+                              onChange={(event) =>
+                                updateLine(line.id, {
+                                  quantity: normalizeMoneyInput(
+                                    event.target.value
+                                  ),
+                                })
+                              }
+                            />
+                          )}
                         </Field>
                         <Field>
                           <FieldLabel>Jedn.</FieldLabel>
@@ -1104,18 +1120,28 @@ function App() {
                             />
                           </TableCell>
                           <TableCell>
-                            <Input
-                              inputMode="decimal"
-                              value={line.quantity}
-                              className="text-right"
-                              onChange={(event) =>
-                                updateLine(line.id, {
-                                  quantity: normalizeMoneyInput(
-                                    event.target.value
-                                  ),
-                                })
-                              }
-                            />
+                            {line.unitLabel === "hod" ? (
+                              <HoursInput
+                                value={line.quantity}
+                                className="text-right"
+                                onChange={(v) =>
+                                  updateLine(line.id, { quantity: v })
+                                }
+                              />
+                            ) : (
+                              <Input
+                                inputMode="decimal"
+                                value={line.quantity}
+                                className="text-right"
+                                onChange={(event) =>
+                                  updateLine(line.id, {
+                                    quantity: normalizeMoneyInput(
+                                      event.target.value
+                                    ),
+                                  })
+                                }
+                              />
+                            )}
                           </TableCell>
                           <TableCell>
                             <Input
@@ -2280,6 +2306,37 @@ function formatInvoiceCount(count: number) {
   }
 
   return `${count} faktur`
+}
+
+function HoursInput({
+  className,
+  value,
+  onChange,
+}: {
+  className?: string
+  value: number
+  onChange: (value: number) => void
+}) {
+  const [raw, setRaw] = useState(() => formatHoursDisplay(value))
+
+  useEffect(() => {
+    setRaw(formatHoursDisplay(value))
+  }, [value])
+
+  return (
+    <Input
+      inputMode="decimal"
+      placeholder="0:30"
+      className={className}
+      value={raw}
+      onChange={(e) => setRaw(e.target.value)}
+      onBlur={() => {
+        const parsed = parseHoursInput(raw)
+        onChange(parsed)
+        setRaw(formatHoursDisplay(parsed))
+      }}
+    />
+  )
 }
 
 function readStoredDraft() {

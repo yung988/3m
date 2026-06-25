@@ -101,8 +101,31 @@ export function buildInvoicePdfFileName(draft: InvoiceDraft) {
   return `${parts.filter(Boolean).join("_") || "faktura"}.pdf`
 }
 
+export function parseHoursInput(value: string): number {
+  const trimmed = value.trim()
+  const timeMatch = trimmed.match(/^(\d+):([0-5]\d)$/)
+  if (timeMatch) {
+    const h = parseInt(timeMatch[1], 10)
+    const m = parseInt(timeMatch[2], 10)
+    return h + m / 60
+  }
+  const n = Number(trimmed.replace(",", "."))
+  return Number.isFinite(n) ? Math.max(0, n) : 0
+}
+
+export function formatHoursDisplay(value: number): string {
+  if (value === 0) return "0"
+  const hours = Math.floor(value)
+  const minutes = Math.round((value - hours) * 60)
+  if (minutes === 0) return String(hours)
+  return `${hours}:${String(minutes).padStart(2, "0")}`
+}
+
 export function formatQuantity(quantity: number, unitLabel: string) {
-  const amount = numberFormatter.format(quantity)
+  const amount =
+    unitLabel === "hod"
+      ? formatHoursDisplay(quantity)
+      : numberFormatter.format(quantity)
 
   return unitLabel ? `${amount} ${unitLabel}` : amount
 }
