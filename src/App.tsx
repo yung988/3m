@@ -30,6 +30,7 @@ import {
   RotateCcwIcon,
   SaveIcon,
   SearchIcon,
+  SendIcon,
   ShoppingCartIcon,
   Trash2Icon,
   XIcon,
@@ -115,6 +116,7 @@ import {
   listInvoices,
   loadInvoice,
   markInvoiceExported,
+  markInvoiceSent,
   saveInvoice,
   setInvoicePaid,
   type InvoiceSummary,
@@ -125,7 +127,7 @@ const STORAGE_KEY = "faktury-pro-stepu:draft:v2"
 
 const statusLabels: Record<InvoiceStatus, string> = {
   draft: "Rozpracováno",
-  issued: "Vystaveno",
+  issued: "Odesláno",
   paid: "Zaplaceno",
   overdue: "Po splatnosti",
   cancelled: "Storno",
@@ -144,6 +146,11 @@ type FilteredPriceItem = {
   selectedLine: InvoiceLine | undefined
 }
 
+type InvoiceValidationIssue = {
+  label: string
+  detail: string
+}
+
 function isLineForPriceItem(line: InvoiceLine, item: PriceItem) {
   return (
     line.description === item.name &&
@@ -154,6 +161,114 @@ function isLineForPriceItem(line: InvoiceLine, item: PriceItem) {
 
 function findLineForPriceItem(lines: InvoiceLine[], item: PriceItem) {
   return lines.find((line) => isLineForPriceItem(line, item))
+}
+
+function getInvoiceValidationIssues(
+  draft: InvoiceDraft,
+  total: number
+): InvoiceValidationIssue[] {
+  const issues: InvoiceValidationIssue[] = []
+
+  if (!draft.invoiceNumber.trim()) {
+    issues.push({
+      label: "Číslo faktury",
+      detail: "Doplň číslo dokladu.",
+    })
+  }
+
+  if (!draft.projectTitle.trim()) {
+    issues.push({
+      label: "Text fakturace",
+      detail: "Doplň, za jakou práci fakturuješ.",
+    })
+  }
+
+  if (!draft.customerName.trim()) {
+    issues.push({
+      label: "Odběratel",
+      detail: "Doplň firmu nebo člověka, komu faktura jde.",
+    })
+  }
+
+  if (!draft.customerAddress.trim()) {
+    issues.push({
+      label: "Adresa odběratele",
+      detail: "Doplň adresu odběratele pro PDF.",
+    })
+  }
+
+  if (!draft.issueDate || !draft.dueDate) {
+    issues.push({
+      label: "Datum",
+      detail: "Doplň datum vystavení i splatnosti.",
+    })
+  } else if (new Date(draft.dueDate) < new Date(draft.issueDate)) {
+    issues.push({
+      label: "Splatnost",
+      detail: "Splatnost nemá být dřív než vystavení.",
+    })
+  }
+
+  if (draft.lines.length === 0) {
+    issues.push({
+      label: "Položky",
+      detail: "Přidej aspoň jednu položku z ceníku nebo vlastní řádek.",
+    })
+  }
+
+  draft.lines.forEach((line, index) => {
+    const rowLabel = `Položka ${index + 1}`
+
+    if (!line.description.trim()) {
+      issues.push({
+        label: rowLabel,
+        detail: "Popis položky nesmí být prázdný.",
+      })
+    }
+
+    if (line.quantity <= 0) {
+      issues.push({
+        label: rowLabel,
+        detail: "Množství musí být větší než nula.",
+      })
+    }
+
+    if (line.unitPrice < 0) {
+      issues.push({
+        label: rowLabel,
+        detail: "Cena nesmí být záporná.",
+      })
+    }
+  })
+
+  if (total <= 0) {
+    issues.push({
+      label: "Částka",
+      detail: "Celková částka musí být větší než 0 Kč.",
+    })
+  }
+
+  return issues
+}
+
+function getDraftPaymentStateText(draft: InvoiceDraft) {
+  if (draft.status === "paid") {
+    return `Zaplaceno${draft.paidAt ? ` ${formatDate(draft.paidAt)}` : ""}`
+  }
+
+  if (draft.status === "issued") {
+    return "Odesláno, čeká na platbu"
+  }
+
+  if (draft.status === "overdue") {
+    return "Po splatnosti"
+  }
+
+  if (draft.status === "cancelled") {
+    return "Storno"
+  }
+
+  return "Rozpracováno"
 }
 
 function App() {
@@ -172,8 +287,13 @@ function App() {
   const [message, setMessage] = useState<AppMessage | null>(null)
   const [view, setView] = useState<AppView>("dashboard")
   const [previewVisible, setPreviewVisible] = useState(false)
+  const [showExportIssues, setShowExportIssues] = useState(false)
 
   const total = useMemo(() => calculateTotal(draft.lines), [draft.lines])
+  const invoiceValidationIssues = useMemo(
+    () => getInvoiceValidationIssues(draft, total),
+    [draft, total]
+  )
   const user = session?.user ?? null
   const databaseIsConfigured = supabase !== null
   const exportFileName = useMemo(() => buildInvoicePdfFileName(draft), [draft])
@@ -490,6 +610,7 @@ function App() {
       setDraft(await loadInvoice(id))
       setView("editor")
       setPreviewVisible(false)
+      setShowExportIssues(false)
       setMessage({
         title: "Faktura načtena",
         description: "Uložený doklad se propsal do editoru.",
@@ -513,6 +634,7 @@ function App() {
       if (draft.id === id) {
         setDraft(createDefaultDraft())
         setView("dashboard")
+        setShowExportIssues(false)
       }
 
       await refreshSavedInvoices()
@@ -550,13 +672,99 @@ function App() {
     }
   }
 
+  async function handleMarkSent(id: string) {
+    try {
+      setSyncing(true)
+      const updatedDraft = await markInvoiceSent(id)
+
+      if (draft.id === id) {
+        setDraft(updatedDraft)
+      }
+
+      await refreshSavedInvoices()
+      setMessage({
+        title: "Faktura označena jako odeslaná",
+        description: `Doklad ${updatedDraft.invoiceNumber} teď čeká na platbu.`,
+      })
+    } catch (error) {
+      showError("Označení odeslání selhalo", error)
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  async function handleMarkCurrentSent() {
+    if (invoiceValidationIssues.length > 0) {
+      setPreviewVisible(false)
+      setShowExportIssues(true)
+      setMessage({
+        title: "Fakturu zatím nejde označit jako odeslanou",
+        description: "Oprav checklist v editoru a potom akci zopakuj.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!user) {
+      setMessage({
+        title: databaseIsConfigured
+          ? "Nejdřív se přihlas"
+          : "Chybí nastavení Supabase",
+        description: databaseIsConfigured
+          ? "Odeslání faktury se ukládá do databáze až po přihlášení."
+          : `Bez env proměnných ${missingSupabaseEnv.join(", ")} nejde ukládat do databáze.`,
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (draft.status === "paid" || draft.status === "cancelled") {
+      setMessage({
+        title: "Stav nejde změnit na odesláno",
+        description:
+          "Zaplacenou nebo stornovanou fakturu nech tak, případně nejdřív změň stav ručně.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      setSyncing(true)
+      const savedDraft = await saveInvoice({ ...draft, status: "issued" }, user)
+      const updatedDraft = await markInvoiceSent(savedDraft.id!)
+      setDraft(updatedDraft)
+      await refreshSavedInvoices()
+      setMessage({
+        title: "Faktura označena jako odeslaná",
+        description: `Doklad ${updatedDraft.invoiceNumber} teď čeká na platbu.`,
+      })
+    } catch (error) {
+      showError("Označení odeslání selhalo", error)
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   async function handleExportInvoice() {
+    if (invoiceValidationIssues.length > 0) {
+      setPreviewVisible(false)
+      setShowExportIssues(true)
+      setMessage({
+        title: "Fakturu zatím nejde exportovat",
+        description: "Oprav checklist v editoru a potom akci zopakuj.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setShowExportIssues(false)
+
     if (!previewVisible) {
       setPreviewVisible(true)
       setMessage({
         title: "Zkontroluj náhled",
         description:
-          "Faktura je teď zobrazená přes celou obrazovku. Pokud sedí, klikni v náhledu na Export / PDF.",
+          "Faktura je teď zobrazená přes celou obrazovku. Pokud sedí, klikni v náhledu na Export / PDF. Po odeslání firmě ji označ jako Odesláno.",
       })
       return
     }
@@ -599,6 +807,7 @@ function App() {
     setDraft(nextDraft)
     setView("editor")
     setPreviewVisible(false)
+    setShowExportIssues(false)
     setMessage({
       title: "Nová faktura",
       description: `Editor je připravený pro doklad ${nextDraft.invoiceNumber}.`,
@@ -631,6 +840,7 @@ function App() {
       })
       setView("editor")
       setPreviewVisible(false)
+      setShowExportIssues(false)
       setMessage({
         title: "Faktura duplikována",
         description: `Kopie dokladu je připravená v editoru jako ${nextNumber}.`,
@@ -699,6 +909,15 @@ function App() {
       <Button onClick={handleSaveInvoice} disabled={syncing || !authReady}>
         <SaveIcon data-icon="inline-start" />
         {syncing ? "Ukládám…" : "Uložit"}
+      </Button>
+      <Button
+        variant="outline"
+        onClick={handleMarkCurrentSent}
+        disabled={syncing || !authReady}
+        aria-label="Označit jako odesláno"
+      >
+        <SendIcon data-icon="inline-start" />
+        <span className="hidden sm:inline">Odesláno</span>
       </Button>
       <Button onClick={handleExportInvoice} disabled={syncing}>
         <PrinterIcon data-icon="inline-start" />
@@ -773,6 +992,7 @@ function App() {
             onDelete={handleDeleteInvoice}
             onDuplicate={handleDuplicateInvoice}
             onLoad={handleLoadInvoice}
+            onMarkSent={handleMarkSent}
             onTogglePaid={handleTogglePaid}
           />
         </main>
@@ -815,6 +1035,21 @@ function App() {
               <Alert variant={message.variant}>
                 <AlertTitle>{message.title}</AlertTitle>
                 <AlertDescription>{message.description}</AlertDescription>
+              </Alert>
+            ) : null}
+
+            {showExportIssues && invoiceValidationIssues.length > 0 ? (
+              <Alert variant="destructive">
+                <AlertTitle>Před exportem oprav tyhle věci</AlertTitle>
+                <AlertDescription>
+                  <ul className="mt-2 flex flex-col gap-1">
+                    {invoiceValidationIssues.map((issue) => (
+                      <li key={`${issue.label}-${issue.detail}`}>
+                        <strong>{issue.label}:</strong> {issue.detail}
+                      </li>
+                    ))}
+                  </ul>
+                </AlertDescription>
               </Alert>
             ) : null}
 
@@ -912,9 +1147,7 @@ function App() {
                   Platba
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {draft.status === "paid"
-                    ? `Zaplaceno${draft.paidAt ? ` ${formatDate(draft.paidAt)}` : ""}`
-                    : "Nezaplaceno"}
+                  {getDraftPaymentStateText(draft)}
                 </p>
               </div>
               <div className="rounded-lg border bg-card p-3">
@@ -1510,14 +1743,14 @@ function InvoiceStatsCard({ invoices }: { invoices: InvoiceSummary[] }) {
             detail={`${formatInvoiceCount(stats.paidCount)} zaplaceno`}
           />
           <StatTile
-            label="Nezaplaceno"
-            value={formatCurrency(stats.unpaidTotal)}
-            detail={`${formatInvoiceCount(stats.unpaidCount)} otevřeno`}
+            label="Po splatnosti"
+            value={formatCurrency(stats.overdueTotal)}
+            detail={formatInvoiceCount(stats.overdueCount)}
           />
           <StatTile
-            label="Čeká na export"
-            value={formatCurrency(stats.waitingExportTotal)}
-            detail={formatInvoiceCount(stats.waitingExportCount)}
+            label="Připravit / odeslat"
+            value={formatCurrency(stats.waitingSendTotal)}
+            detail={formatInvoiceCount(stats.waitingSendCount)}
           />
           <StatTile
             label="Čeká na platbu"
@@ -1537,6 +1770,9 @@ function InvoiceStatsCard({ invoices }: { invoices: InvoiceSummary[] }) {
           </Badge>
           <Badge variant="outline">
             {formatCurrency(stats.activeTotal)} aktivně v oběhu
+          </Badge>
+          <Badge variant="outline">
+            {formatCurrency(stats.unpaidTotal)} nezaplaceno
           </Badge>
         </div>
       </CardContent>
@@ -1585,6 +1821,48 @@ const statusVariant: Record<
   cancelled: "outline",
 }
 
+function getInvoiceStatusLabel(invoice: InvoiceSummary) {
+  if (isInvoiceOverdue(invoice)) {
+    return "Po splatnosti"
+  }
+
+  return (
+    statusLabels[invoice.status as InvoiceStatus] ??
+    String(invoice.status || "Neznámý stav")
+  )
+}
+
+function getInvoiceStatusVariant(
+  invoice: InvoiceSummary
+): "default" | "secondary" | "outline" | "destructive" {
+  if (isInvoiceOverdue(invoice)) {
+    return "destructive"
+  }
+
+  return statusVariant[invoice.status as InvoiceStatus] ?? "outline"
+}
+
+function isInvoiceOpenForPayment(invoice: InvoiceSummary) {
+  return !["draft", "paid", "cancelled"].includes(invoice.status)
+}
+
+function isInvoiceOverdue(invoice: InvoiceSummary) {
+  return isInvoiceOpenForPayment(invoice) && invoice.due_date < todayInput()
+}
+
+function isInvoiceWaitingForSend(invoice: InvoiceSummary) {
+  if (
+    invoice.status === "paid" ||
+    invoice.status === "issued" ||
+    invoice.status === "overdue" ||
+    invoice.status === "cancelled"
+  ) {
+    return false
+  }
+
+  return Boolean(invoice.exported_at)
+}
+
 function SortHeader({
   label,
   sortKey,
@@ -1626,6 +1904,7 @@ function SavedInvoicesCard({
   onDelete,
   onDuplicate,
   onLoad,
+  onMarkSent,
   onTogglePaid,
 }: {
   activeInvoiceId?: string
@@ -1634,6 +1913,7 @@ function SavedInvoicesCard({
   onDelete: (id: string) => void
   onDuplicate: (id: string) => void
   onLoad: (id: string) => void
+  onMarkSent: (id: string) => void
   onTogglePaid: (id: string, isPaid: boolean) => void
 }) {
   const [search, setSearch] = useState("")
@@ -1659,9 +1939,7 @@ function SavedInvoicesCard({
             (inv.project_subtitle ?? "")
               .toLocaleLowerCase("cs-CZ")
               .includes(q) ||
-            statusLabels[inv.status as InvoiceStatus]
-              ?.toLocaleLowerCase("cs-CZ")
-              .includes(q)
+            getInvoiceStatusLabel(inv).toLocaleLowerCase("cs-CZ").includes(q)
         )
       : invoices
 
@@ -1737,7 +2015,13 @@ function SavedInvoicesCard({
             <ul className="flex flex-col gap-2 md:hidden">
               {filtered.map((invoice) => {
                 const isPaid = invoice.status === "paid"
+                const isDraft = invoice.status === "draft"
                 const isActive = activeInvoiceId === invoice.id
+                const isWaitingForSend = isInvoiceWaitingForSend(invoice)
+                const canTogglePaid = !isDraft && !isWaitingForSend
+                const hasWorkflowAction = isWaitingForSend || canTogglePaid
+                const statusLabel = getInvoiceStatusLabel(invoice)
+                const statusBadgeVariant = getInvoiceStatusVariant(invoice)
                 return (
                   <li
                     key={invoice.id}
@@ -1770,14 +2054,8 @@ function SavedInvoicesCard({
                         </p>
                       ) : null}
                       <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                        <Badge
-                          variant={
-                            statusVariant[invoice.status as InvoiceStatus] ??
-                            "outline"
-                          }
-                        >
-                          {statusLabels[invoice.status as InvoiceStatus] ??
-                            invoice.status}
+                        <Badge variant={statusBadgeVariant}>
+                          {statusLabel}
                         </Badge>
                         {invoice.exported_at ? (
                           <Badge variant="secondary">exportováno</Badge>
@@ -1806,10 +2084,30 @@ function SavedInvoicesCard({
                         size="sm"
                         variant="outline"
                         className="h-9 flex-1"
-                        onClick={() => onTogglePaid(invoice.id, !isPaid)}
+                        onClick={() =>
+                          isDraft
+                            ? onLoad(invoice.id)
+                            : isWaitingForSend
+                              ? onMarkSent(invoice.id)
+                              : onTogglePaid(invoice.id, !isPaid)
+                        }
                       >
-                        <CheckCircle2Icon className="size-4" />
-                        {isPaid ? "Zaplaceno" : "Zaplatit"}
+                        {isDraft ? (
+                          <>
+                            <PencilIcon className="size-4" />
+                            Dokončit
+                          </>
+                        ) : isWaitingForSend ? (
+                          <>
+                            <SendIcon className="size-4" />
+                            Odesláno
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2Icon className="size-4" />
+                            {isPaid ? "Zaplaceno" : "Zaplatit"}
+                          </>
+                        )}
                       </Button>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -1827,6 +2125,25 @@ function SavedInvoicesCard({
                             {invoice.invoice_number}
                           </DropdownMenuLabel>
                           <DropdownMenuSeparator />
+                          {isWaitingForSend ? (
+                            <DropdownMenuItem
+                              onClick={() => onMarkSent(invoice.id)}
+                            >
+                              <SendIcon />
+                              Označit jako odesláno
+                            </DropdownMenuItem>
+                          ) : null}
+                          {canTogglePaid ? (
+                            <DropdownMenuItem
+                              onClick={() => onTogglePaid(invoice.id, !isPaid)}
+                            >
+                              <CheckCircle2Icon />
+                              {isPaid
+                                ? "Označit jako nezaplaceno"
+                                : "Označit jako zaplaceno"}
+                            </DropdownMenuItem>
+                          ) : null}
+                          {hasWorkflowAction ? <DropdownMenuSeparator /> : null}
                           <DropdownMenuItem
                             onClick={() => onDuplicate(invoice.id)}
                           >
@@ -1931,6 +2248,12 @@ function SavedInvoicesCard({
                 <TableBody>
                   {filtered.map((invoice) => {
                     const isPaid = invoice.status === "paid"
+                    const isDraft = invoice.status === "draft"
+                    const isWaitingForSend = isInvoiceWaitingForSend(invoice)
+                    const canTogglePaid = !isDraft && !isWaitingForSend
+                    const hasWorkflowAction = isWaitingForSend || canTogglePaid
+                    const statusLabel = getInvoiceStatusLabel(invoice)
+                    const statusBadgeVariant = getInvoiceStatusVariant(invoice)
                     return (
                       <ContextMenu key={invoice.id}>
                         <ContextMenuTrigger asChild>
@@ -1974,16 +2297,8 @@ function SavedInvoicesCard({
                               {formatCurrency(Number(invoice.total_amount))}
                             </TableCell>
                             <TableCell>
-                              <Badge
-                                variant={
-                                  statusVariant[
-                                    invoice.status as InvoiceStatus
-                                  ] ?? "outline"
-                                }
-                              >
-                                {statusLabels[
-                                  invoice.status as InvoiceStatus
-                                ] ?? invoice.status}
+                              <Badge variant={statusBadgeVariant}>
+                                {statusLabel}
                               </Badge>
                             </TableCell>
                             <TableCell>
@@ -2015,15 +2330,25 @@ function SavedInvoicesCard({
                             Duplikovat
                           </ContextMenuItem>
                           <ContextMenuSeparator />
-                          <ContextMenuItem
-                            onClick={() => onTogglePaid(invoice.id, !isPaid)}
-                          >
-                            <CheckCircle2Icon className="size-4" />
-                            {isPaid
-                              ? "Označit jako nezaplaceno"
-                              : "Označit jako zaplaceno"}
-                          </ContextMenuItem>
-                          <ContextMenuSeparator />
+                          {isWaitingForSend ? (
+                            <ContextMenuItem
+                              onClick={() => onMarkSent(invoice.id)}
+                            >
+                              <SendIcon />
+                              Označit jako odesláno
+                            </ContextMenuItem>
+                          ) : null}
+                          {canTogglePaid ? (
+                            <ContextMenuItem
+                              onClick={() => onTogglePaid(invoice.id, !isPaid)}
+                            >
+                              <CheckCircle2Icon className="size-4" />
+                              {isPaid
+                                ? "Označit jako nezaplaceno"
+                                : "Označit jako zaplaceno"}
+                            </ContextMenuItem>
+                          ) : null}
+                          {hasWorkflowAction ? <ContextMenuSeparator /> : null}
                           <ContextMenuItem
                             variant="destructive"
                             onClick={() => onDelete(invoice.id)}
@@ -2313,9 +2638,16 @@ function createInvoiceStats(invoices: InvoiceSummary[]) {
       const amount = Number(invoice.total_amount) || 0
       const isCancelled = invoice.status === "cancelled"
       const isPaid = invoice.status === "paid"
+      const isDraft = invoice.status === "draft"
 
       if (isCancelled) {
         stats.cancelledCount += 1
+        return stats
+      }
+
+      if (isDraft) {
+        stats.waitingSendCount += 1
+        stats.waitingSendTotal += amount
         return stats
       }
 
@@ -2329,27 +2661,29 @@ function createInvoiceStats(invoices: InvoiceSummary[]) {
       stats.unpaidTotal += amount
       stats.activeTotal += amount
 
-      if (invoice.exported_at) {
-        stats.waitingPaymentCount += 1
-        stats.waitingPaymentTotal += amount
-      } else {
-        stats.waitingExportCount += 1
-        stats.waitingExportTotal += amount
+      if (isInvoiceOverdue(invoice)) {
+        stats.overdueCount += 1
+        stats.overdueTotal += amount
       }
+
+      stats.waitingPaymentCount += 1
+      stats.waitingPaymentTotal += amount
 
       return stats
     },
     {
       activeTotal: 0,
       cancelledCount: 0,
+      overdueCount: 0,
+      overdueTotal: 0,
       paidCount: 0,
       paidTotal: 0,
       unpaidCount: 0,
       unpaidTotal: 0,
-      waitingExportCount: 0,
-      waitingExportTotal: 0,
       waitingPaymentCount: 0,
       waitingPaymentTotal: 0,
+      waitingSendCount: 0,
+      waitingSendTotal: 0,
     }
   )
 }
@@ -2364,6 +2698,15 @@ function formatInvoiceCount(count: number) {
   }
 
   return `${count} faktur`
+}
+
+function todayInput() {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, "0")
+  const day = String(now.getDate()).padStart(2, "0")
+
+  return `${year}-${month}-${day}`
 }
 
 function HoursInput({

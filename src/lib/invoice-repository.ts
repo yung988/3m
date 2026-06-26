@@ -147,6 +147,24 @@ export async function markInvoiceExported(id: string) {
   return fromInvoiceRow(data as InvoiceWithLines)
 }
 
+export async function markInvoiceSent(id: string) {
+  const supabase = getSupabaseClient()
+  const { data, error } = await supabase
+    .from("invoices")
+    .update({
+      status: "issued",
+    })
+    .eq("id", id)
+    .select("*, invoice_lines(*)")
+    .single()
+
+  if (error) {
+    throw error
+  }
+
+  return fromInvoiceRow(data as InvoiceWithLines)
+}
+
 export async function setInvoicePaid(id: string, isPaid: boolean) {
   const supabase = getSupabaseClient()
   const { data, error } = await supabase
