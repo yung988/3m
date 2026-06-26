@@ -782,7 +782,7 @@ function App() {
 
   return (
     <AppShell actions={editorActions} userEmail={user.email}>
-      <main className="mx-auto grid max-w-[1400px] grid-cols-1 gap-4 p-4 lg:grid-cols-[minmax(300px,360px)_minmax(0,1fr)]">
+      <main className="mx-auto grid max-w-[1400px] grid-cols-1 gap-4 px-4 pt-4 pb-28 lg:grid-cols-[minmax(300px,360px)_minmax(0,1fr)] lg:pb-4">
         {/* Invoice form — DOM first so mobile shows it before the price list */}
         <Card className="no-print h-fit lg:order-2">
           <CardHeader>
@@ -794,7 +794,7 @@ function App() {
               <div className="flex gap-2">
                 <a
                   href="#cenik-sekce"
-                  className="lg:hidden inline-flex h-8 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium hover:bg-muted"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium hover:bg-muted lg:hidden"
                 >
                   <ShoppingCartIcon className="size-4" />
                   Ceník
@@ -819,7 +819,7 @@ function App() {
             ) : null}
 
             <FieldSet>
-              <FieldGroup className="grid gap-4 grid-cols-2 md:grid-cols-4">
+              <FieldGroup className="grid grid-cols-2 gap-4 md:grid-cols-4">
                 <Field>
                   <FieldLabel htmlFor="invoice-number">
                     Číslo faktury
@@ -905,7 +905,7 @@ function App() {
               </FieldGroup>
             </FieldSet>
 
-            <div className="grid gap-3 grid-cols-2">
+            <div className="grid grid-cols-2 gap-3">
               <div className="rounded-lg border bg-card p-3">
                 <div className="flex items-center gap-2 text-sm font-medium">
                   <BanknoteIcon data-icon="inline-start" />
@@ -956,7 +956,7 @@ function App() {
                   />
                 </Field>
               </FieldGroup>
-              <FieldGroup className="grid gap-4 grid-cols-2">
+              <FieldGroup className="grid grid-cols-2 gap-4">
                 <Field>
                   <FieldLabel htmlFor="customer-id">IČO</FieldLabel>
                   <Input
@@ -1079,8 +1079,7 @@ function App() {
                         </Field>
                       </div>
                       <p className="text-right text-sm font-medium">
-                        Celkem:{" "}
-                        {formatCurrency(line.quantity * line.unitPrice)}
+                        Celkem: {formatCurrency(line.quantity * line.unitPrice)}
                       </p>
                     </div>
                   ))}
@@ -1206,7 +1205,7 @@ function App() {
         {/* Price list — DOM second so mobile shows it after the form */}
         <div
           id="cenik-sekce"
-          className="no-print flex h-fit flex-col gap-4 scroll-mt-20 lg:order-1 lg:sticky lg:top-24"
+          className="no-print flex h-fit scroll-mt-20 flex-col gap-4 lg:sticky lg:top-24 lg:order-1"
         >
           <Card>
             <CardHeader>
@@ -1217,7 +1216,7 @@ function App() {
               <CardAction>
                 <a
                   href="#invoice-number"
-                  className="lg:hidden inline-flex h-8 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium hover:bg-muted"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium hover:bg-muted lg:hidden"
                 >
                   ↑ Zpět
                 </a>
@@ -1257,7 +1256,7 @@ function App() {
                 </Field>
               </FieldGroup>
 
-              <div className="lg:max-h-[62svh] lg:overflow-y-auto pr-1">
+              <div className="pr-1 lg:max-h-[62svh] lg:overflow-y-auto">
                 {filteredItems.length > 0 ? (
                   <ul className="flex flex-col">
                     {filteredItems.map(({ item, selectedLine }) => {
@@ -1348,6 +1347,13 @@ function App() {
           onExport={handleExportInvoice}
         />
       ) : null}
+      <MobileEditorActionBar
+        authReady={authReady}
+        isSyncing={syncing}
+        onExport={handleExportInvoice}
+        onSave={handleSaveInvoice}
+        total={total}
+      />
     </AppShell>
   )
 }
@@ -1364,7 +1370,7 @@ function AppShell({
   return (
     <div className="min-h-svh bg-background text-foreground">
       <header className="no-print sticky top-0 z-30 border-b bg-background/95 backdrop-blur">
-        <div className="mx-auto flex max-w-[1800px] items-center justify-between gap-3 px-4 py-3">
+        <div className="mx-auto flex max-w-[1800px] flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
           <div className="min-w-0 shrink">
             <div className="flex items-center gap-2">
               <h1 className="text-lg leading-tight font-semibold sm:text-2xl">
@@ -1381,7 +1387,7 @@ function AppShell({
             ) : null}
           </div>
           {actions ? (
-            <div className="flex shrink-0 items-center gap-2 overflow-x-auto">
+            <div className="flex w-full items-center gap-2 overflow-x-auto pb-1 sm:w-auto sm:shrink-0 sm:pb-0">
               {actions}
             </div>
           ) : null}
@@ -1650,7 +1656,9 @@ function SavedInvoicesCard({
           (inv) =>
             inv.invoice_number.toLocaleLowerCase("cs-CZ").includes(q) ||
             (inv.project_title ?? "").toLocaleLowerCase("cs-CZ").includes(q) ||
-            (inv.project_subtitle ?? "").toLocaleLowerCase("cs-CZ").includes(q) ||
+            (inv.project_subtitle ?? "")
+              .toLocaleLowerCase("cs-CZ")
+              .includes(q) ||
             statusLabels[inv.status as InvoiceStatus]
               ?.toLocaleLowerCase("cs-CZ")
               .includes(q)
@@ -1658,8 +1666,8 @@ function SavedInvoicesCard({
       : invoices
 
     return [...list].sort((a, b) => {
-      let av: string | number = ""
-      let bv: string | number = ""
+      let av: string | number
+      let bv: string | number
 
       if (sortKey === "total_amount") {
         av = Number(a.total_amount) || 0
@@ -1692,9 +1700,9 @@ function SavedInvoicesCard({
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <div className="relative">
-          <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            className="pl-8 pr-8"
+            className="pr-8 pl-8"
             placeholder="Hledat fakturu, odběratele, stav…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -1702,7 +1710,7 @@ function SavedInvoicesCard({
           {search ? (
             <button
               type="button"
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              className="absolute top-1/2 right-2.5 -translate-y-1/2 text-muted-foreground hover:text-foreground"
               aria-label="Vymazat hledání"
               onClick={() => setSearch("")}
             >
@@ -1744,7 +1752,7 @@ function SavedInvoicesCard({
                       onClick={() => onLoad(invoice.id)}
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <span className="font-medium leading-tight">
+                        <span className="leading-tight font-medium">
                           {invoice.invoice_number}
                         </span>
                         <span className="shrink-0 font-semibold tabular-nums">
@@ -2082,6 +2090,56 @@ function InvoicePreviewOverlay({
   )
 }
 
+function MobileEditorActionBar({
+  authReady,
+  isSyncing,
+  onExport,
+  onSave,
+  total,
+}: {
+  authReady: boolean
+  isSyncing: boolean
+  onExport: () => void
+  onSave: () => void
+  total: number
+}) {
+  return (
+    <div className="no-print fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 px-4 py-3 shadow-[0_-12px_30px_oklch(0.18_0.012_95_/_12%)] backdrop-blur lg:hidden">
+      <div className="mx-auto flex max-w-[1400px] items-center gap-2">
+        <Button
+          asChild
+          size="icon-lg"
+          variant="outline"
+          aria-label="Přejít na ceník"
+        >
+          <a href="#cenik-sekce">
+            <ShoppingCartIcon />
+          </a>
+        </Button>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-medium text-muted-foreground">K úhradě</p>
+          <p className="truncate text-base font-semibold tabular-nums">
+            {formatCurrency(total)}
+          </p>
+        </div>
+        <Button
+          size="icon-lg"
+          variant="outline"
+          disabled={isSyncing || !authReady}
+          aria-label="Uložit fakturu"
+          onClick={onSave}
+        >
+          <SaveIcon />
+        </Button>
+        <Button size="lg" disabled={isSyncing} onClick={onExport}>
+          <PrinterIcon data-icon="inline-start" />
+          PDF
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 function InvoiceDocument({
   draft,
   qrDataUrl,
@@ -2317,23 +2375,26 @@ function HoursInput({
   value: number
   onChange: (value: number) => void
 }) {
-  const [raw, setRaw] = useState(() => formatHoursDisplay(value))
-
-  useEffect(() => {
-    setRaw(formatHoursDisplay(value))
-  }, [value])
+  const [raw, setRaw] = useState("")
+  const [isEditing, setIsEditing] = useState(false)
+  const displayValue = isEditing ? raw : formatHoursDisplay(value)
 
   return (
     <Input
       inputMode="decimal"
       placeholder="0:30"
       className={className}
-      value={raw}
+      value={displayValue}
+      onFocus={() => {
+        setRaw(formatHoursDisplay(value))
+        setIsEditing(true)
+      }}
       onChange={(e) => setRaw(e.target.value)}
       onBlur={() => {
-        const parsed = parseHoursInput(raw)
+        const parsed = parseHoursInput(displayValue)
         onChange(parsed)
-        setRaw(formatHoursDisplay(parsed))
+        setRaw("")
+        setIsEditing(false)
       }}
     />
   )
