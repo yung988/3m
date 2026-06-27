@@ -14,6 +14,8 @@ import {
   BanknoteIcon,
   CheckCircle2Icon,
   CircleDollarSignIcon,
+  ClipboardCopyIcon,
+  Clock3Icon,
   CloudIcon,
   CopyIcon,
   EllipsisIcon,
@@ -22,6 +24,7 @@ import {
   FilePlus2Icon,
   LayoutDashboardIcon,
   LogOutIcon,
+  MessageSquareTextIcon,
   MinusIcon,
   PencilIcon,
   PlusCircleIcon,
@@ -33,6 +36,7 @@ import {
   SendIcon,
   ShoppingCartIcon,
   Trash2Icon,
+  TriangleAlertIcon,
   XIcon,
 } from "lucide-react"
 
@@ -124,6 +128,7 @@ import {
 import { missingSupabaseEnv, supabase } from "@/lib/supabase"
 
 const STORAGE_KEY = "faktury-pro-stepu:draft:v2"
+const FOLLOW_UP_SOON_DAYS = 7
 
 const statusLabels: Record<InvoiceStatus, string> = {
   draft: "Rozpracováno",
@@ -149,6 +154,12 @@ type FilteredPriceItem = {
 type InvoiceValidationIssue = {
   label: string
   detail: string
+}
+
+type InvoiceFollowUpItem = {
+  invoice: InvoiceSummary
+  daysUntilDue: number
+  urgency: "overdue" | "soon"
 }
 
 function isLineForPriceItem(line: InvoiceLine, item: PriceItem) {
@@ -693,6 +704,18 @@ function App() {
     }
   }
 
+  async function handleCopyReminder(invoice: InvoiceSummary) {
+    try {
+      await copyTextToClipboard(buildPaymentReminderText(invoice))
+      setMessage({
+        title: "Upomínka zkopírována",
+        description: `Text pro fakturu ${invoice.invoice_number} je připravený ve schránce.`,
+      })
+    } catch (error) {
+      showError("Kopírování upomínky selhalo", error)
+    }
+  }
+
   async function handleMarkCurrentSent() {
     if (invoiceValidationIssues.length > 0) {
       setPreviewVisible(false)
@@ -985,6 +1008,14 @@ function App() {
         <main className="mx-auto flex max-w-[1400px] flex-col gap-4 p-4">
           {message ? <MessageAlert message={message} /> : null}
           <InvoiceStatsCard invoices={savedInvoices} />
+          <InvoiceFollowUpCard
+            invoices={savedInvoices}
+            isLoading={savedInvoicesLoading}
+            isSyncing={syncing}
+            onCopyReminder={handleCopyReminder}
+            onLoad={handleLoadInvoice}
+            onTogglePaid={handleTogglePaid}
+          />
           <SavedInvoicesCard
             activeInvoiceId={draft.id}
             invoices={savedInvoices}
@@ -1775,6 +1806,136 @@ function InvoiceStatsCard({ invoices }: { invoices: InvoiceSummary[] }) {
             {formatCurrency(stats.unpaidTotal)} nezaplaceno
           </Badge>
         </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function InvoiceFollowUpCard({
+  invoices,
+  isLoading,
+  isSyncing,
+  onCopyReminder,
+  onLoad,
+  onTogglePaid,
+}: {
+  invoices: InvoiceSummary[]
+  isLoading: boolean
+  isSyncing: boolean
+  onCopyReminder: (invoice: InvoiceSummary) => void
+  onLoad: (id: string) => void
+  onTogglePaid: (id: string, isPaid: boolean) => void
+}) {
+  const followUps = useMemo(() => getInvoiceFollowUpItems(invoices), [invoices])
+  const hasOverdue = followUps.some((item) => item.urgency === "overdue")
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <MessageSquareTextIcon data-icon="inline-start" />K řešení
+        </CardTitle>
+        <CardDescription>
+          Faktury po splatnosti a blížící se platby.
+        </CardDescription>
+        <CardAction>
+          <Badge
+            variant={
+              hasOverdue
+                ? "destructive"
+                : followUps.length
+                  ? "secondary"
+                  : "outline"
+            }
+          >
+            {formatInvoiceCount(followUps.length)}
+          </Badge>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        {isLoading ? (
+          <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+            Načítám faktury k řešení…
+          </div>
+        ) : followUps.length === 0 ? (
+          <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+            Žádná odeslaná faktura není po splatnosti ani do týdne splatná.
+          </div>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {followUps.map(({ daysUntilDue, invoice, urgency }) => (
+              <li
+                key={invoice.id}
+                className={cn(
+                  "rounded-lg border bg-card p-3",
+                  urgency === "overdue" &&
+                    "border-destructive/30 bg-destructive/5"
+                )}
+              >
+                <div className="flex flex-col gap-3 md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+                  <button
+                    type="button"
+                    className="min-w-0 text-left"
+                    onClick={() => onLoad(invoice.id)}
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge
+                        variant={
+                          urgency === "overdue" ? "destructive" : "secondary"
+                        }
+                      >
+                        {urgency === "overdue" ? (
+                          <TriangleAlertIcon data-icon="inline-start" />
+                        ) : (
+                          <Clock3Icon data-icon="inline-start" />
+                        )}
+                        {formatDueDistance(daysUntilDue)}
+                      </Badge>
+                      <span className="font-medium">
+                        {invoice.invoice_number}
+                      </span>
+                    </div>
+                    <p className="mt-1 truncate text-sm font-medium">
+                      {invoice.project_title || invoice.customer_name}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {formatCurrency(Number(invoice.total_amount) || 0)} ·
+                      splatnost {formatDate(invoice.due_date)}
+                    </p>
+                  </button>
+                  <div className="flex flex-wrap gap-2 md:justify-end">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isSyncing}
+                      onClick={() => onCopyReminder(invoice)}
+                    >
+                      <ClipboardCopyIcon data-icon="inline-start" />
+                      Upomínka
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isSyncing}
+                      onClick={() => onLoad(invoice.id)}
+                    >
+                      <PencilIcon data-icon="inline-start" />
+                      Otevřít
+                    </Button>
+                    <Button
+                      size="sm"
+                      disabled={isSyncing}
+                      onClick={() => onTogglePaid(invoice.id, true)}
+                    >
+                      <CheckCircle2Icon data-icon="inline-start" />
+                      Zaplaceno
+                    </Button>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </CardContent>
     </Card>
   )
@@ -2686,6 +2847,152 @@ function createInvoiceStats(invoices: InvoiceSummary[]) {
       waitingSendTotal: 0,
     }
   )
+}
+
+function getInvoiceFollowUpItems(
+  invoices: InvoiceSummary[]
+): InvoiceFollowUpItem[] {
+  return invoices
+    .map((invoice) => {
+      const daysUntilDue = getInvoiceDaysUntilDue(invoice)
+
+      if (daysUntilDue === null || !isInvoiceOpenForPayment(invoice)) {
+        return null
+      }
+
+      if (daysUntilDue > FOLLOW_UP_SOON_DAYS) {
+        return null
+      }
+
+      return {
+        invoice,
+        daysUntilDue,
+        urgency: daysUntilDue < 0 ? "overdue" : "soon",
+      } satisfies InvoiceFollowUpItem
+    })
+    .filter((item): item is InvoiceFollowUpItem => item !== null)
+    .sort((a, b) => {
+      const dueOrder = a.daysUntilDue - b.daysUntilDue
+
+      if (dueOrder !== 0) {
+        return dueOrder
+      }
+
+      return Number(b.invoice.total_amount) - Number(a.invoice.total_amount)
+    })
+}
+
+function getInvoiceDaysUntilDue(invoice: InvoiceSummary) {
+  if (!invoice.due_date) {
+    return null
+  }
+
+  return getDateInputDistance(todayInput(), invoice.due_date)
+}
+
+function getDateInputDistance(fromDateInput: string, toDateInput: string) {
+  const from = parseDateInput(fromDateInput)
+  const to = parseDateInput(toDateInput)
+
+  if (!from || !to) {
+    return null
+  }
+
+  const dayMs = 24 * 60 * 60 * 1000
+
+  return Math.round((to.getTime() - from.getTime()) / dayMs)
+}
+
+function parseDateInput(dateInput: string) {
+  const [year, month, day] = dateInput.split("-").map(Number)
+
+  if (!year || !month || !day) {
+    return null
+  }
+
+  return new Date(year, month - 1, day)
+}
+
+function formatDueDistance(daysUntilDue: number) {
+  if (daysUntilDue < 0) {
+    const overdueDays = Math.abs(daysUntilDue)
+
+    return `${overdueDays} ${formatDayUnit(overdueDays)} po splatnosti`
+  }
+
+  if (daysUntilDue === 0) {
+    return "Splatné dnes"
+  }
+
+  if (daysUntilDue === 1) {
+    return "Splatné zítra"
+  }
+
+  return `Splatné za ${daysUntilDue} ${formatDayUnit(daysUntilDue)}`
+}
+
+function formatDayUnit(count: number) {
+  if (count === 1) {
+    return "den"
+  }
+
+  if (count > 1 && count < 5) {
+    return "dny"
+  }
+
+  return "dní"
+}
+
+function buildPaymentReminderText(invoice: InvoiceSummary) {
+  const daysUntilDue = getInvoiceDaysUntilDue(invoice)
+  const amount = formatCurrency(Number(invoice.total_amount) || 0)
+  const project = [
+    invoice.project_title?.trim(),
+    invoice.project_subtitle?.trim(),
+  ]
+    .filter(Boolean)
+    .join(", ")
+  const intro =
+    daysUntilDue !== null && daysUntilDue < 0
+      ? "připomínám fakturu"
+      : "připomínám blížící se splatnost faktury"
+  const dueText =
+    daysUntilDue !== null && daysUntilDue < 0
+      ? `Splatnost byla ${formatDate(invoice.due_date)}.`
+      : `Splatnost je ${formatDate(invoice.due_date)}.`
+
+  return [
+    "Dobrý den,",
+    "",
+    `${intro} ${invoice.invoice_number}${project ? ` za ${project}` : ""} na částku ${amount}. ${dueText}`,
+    "V evidenci ji mám zatím jako neuhrazenou. Prosím o kontrolu platby a případně o informaci, kdy bude odeslaná.",
+    "",
+    "Děkuji,",
+    supplier.name,
+  ].join("\n")
+}
+
+async function copyTextToClipboard(text: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text)
+    return
+  }
+
+  const textarea = document.createElement("textarea")
+  textarea.value = text
+  textarea.setAttribute("readonly", "")
+  textarea.style.position = "fixed"
+  textarea.style.top = "0"
+  textarea.style.opacity = "0"
+  document.body.append(textarea)
+  textarea.select()
+
+  const didCopy = document.execCommand("copy")
+  textarea.remove()
+
+  if (!didCopy) {
+    throw new Error("Prohlížeč nepovolil kopírování do schránky.")
+  }
 }
 
 function formatInvoiceCount(count: number) {
