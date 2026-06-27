@@ -1,4 +1,5 @@
 import {
+  type ChangeEvent,
   type ReactNode,
   useCallback,
   useEffect,
@@ -39,6 +40,7 @@ import {
   ShoppingCartIcon,
   Trash2Icon,
   TriangleAlertIcon,
+  UploadIcon,
   XIcon,
 } from "lucide-react"
 
@@ -95,6 +97,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { priceCategories, priceList, type PriceItem } from "@/data/price-list"
+import {
+  parseAirBankXml,
+  type ParsedAirBankTransaction,
+} from "@/lib/airbank-xml"
 import { cn } from "@/lib/utils"
 import {
   buildPaymentQrString,
@@ -117,8 +123,12 @@ import {
   type InvoiceStatus,
 } from "@/lib/invoice"
 import {
+  type BankTransactionImport,
+  type BankTransactionSummary,
   deleteInvoice,
   getNextInvoiceNumber,
+  importBankTransactions,
+  listBankTransactions,
   listInvoices,
   loadInvoice,
   markInvoiceExported,
@@ -297,6 +307,11 @@ function App() {
   const [authLoading, setAuthLoading] = useState(false)
   const [savedInvoices, setSavedInvoices] = useState<InvoiceSummary[]>([])
   const [savedInvoicesLoading, setSavedInvoicesLoading] = useState(false)
+  const [bankTransactions, setBankTransactions] = useState<
+    BankTransactionSummary[]
+  >([])
+  const [bankTransactionsLoading, setBankTransactionsLoading] = useState(false)
+  const [bankImporting, setBankImporting] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [message, setMessage] = useState<AppMessage | null>(null)
   const [view, setView] = useState<AppView>("dashboard")
@@ -364,6 +379,17 @@ function App() {
     }
   }, [showError])
 
+  const refreshBankTransactions = useCallback(async () => {
+    try {
+      setBankTransactionsLoading(true)
+      setBankTransactions(await listBankTransactions())
+    } catch (error) {
+      showError("Nepodařilo se načíst platby", error)
+    } finally {
+      setBankTransactionsLoading(false)
+    }
+  }, [showError])
+
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(draft))
   }, [draft])
@@ -391,6 +417,7 @@ function App() {
       setAuthReady(true)
       if (!nextSession) {
         setSavedInvoices([])
+        setBankTransactions([])
         setView("dashboard")
       }
     })
@@ -403,9 +430,11 @@ function App() {
 
   useEffect(() => {
     if (user) {
-      void Promise.resolve().then(refreshSavedInvoices)
+      void Promise.resolve().then(async () => {
+        await Promise.all([refreshSavedInvoices(), refreshBankTransactions()])
+      })
     }
-  }, [refreshSavedInvoices, user])
+  }, [refreshBankTransactions, refreshSavedInvoices, user])
 
   useEffect(() => {
     let isCurrent = true
@@ -735,6 +764,58 @@ function App() {
     }
   }
 
+  async function handleImportBankXml(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ""
+
+    if (!file) {
+      return
+    }
+
+    if (!user) {
+      setMessage({
+        title: "Nejdřív se přihlas",
+        description: "Bankovní výpis jde uložit až pod přihlášeným účtem.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      setBankImporting(true)
+      const parsed = parseAirBankXml(await file.text())
+      const rows = parsed.map((transaction): BankTransactionImport => {
+        const match = findInvoiceMatchForTransaction(transaction, savedInvoices)
+
+        return {
+          invoiceId: match?.invoice.id ?? null,
+          sourceTransactionId: transaction.sourceTransactionId,
+          accountIban: transaction.accountIban,
+          counterpartyAccount: transaction.counterpartyAccount,
+          counterpartyName: transaction.counterpartyName,
+          bookedAt: transaction.bookedAt,
+          amount: transaction.amount,
+          currency: transaction.currency,
+          variableSymbol: transaction.variableSymbol,
+          message: transaction.message,
+          rawData: transaction.rawData,
+        }
+      })
+      const imported = await importBankTransactions(rows, user)
+      await refreshBankTransactions()
+
+      const matchedCount = rows.filter((row) => row.invoiceId).length
+      setMessage({
+        title: "Bankovní výpis importován",
+        description: `${imported.length} pohybů uloženo nebo aktualizováno. ${matchedCount} z nich jsem našel podle variabilního symbolu.`,
+      })
+    } catch (error) {
+      showError("Import bankovního XML selhal", error)
+    } finally {
+      setBankImporting(false)
+    }
+  }
+
   async function handleMarkCurrentSent() {
     if (invoiceValidationIssues.length > 0) {
       setPreviewVisible(false)
@@ -1035,6 +1116,16 @@ function App() {
             onCopyReminder={handleCopyReminder}
             onLoad={handleLoadInvoice}
             onTogglePaid={handleTogglePaid}
+          />
+          <BankTransactionsCard
+            imports={bankTransactions}
+            invoices={savedInvoices}
+            isImporting={bankImporting}
+            isLoading={bankTransactionsLoading}
+            isSyncing={syncing}
+            onImportXml={handleImportBankXml}
+            onLoadInvoice={handleLoadInvoice}
+            onMarkPaid={(invoiceId) => handleTogglePaid(invoiceId, true)}
           />
           <SavedInvoicesCard
             activeInvoiceId={draft.id}
@@ -2043,6 +2134,193 @@ function InvoiceFollowUpCard({
   )
 }
 
+function BankTransactionsCard({
+  imports,
+  invoices,
+  isImporting,
+  isLoading,
+  isSyncing,
+  onImportXml,
+  onLoadInvoice,
+  onMarkPaid,
+}: {
+  imports: BankTransactionSummary[]
+  invoices: InvoiceSummary[]
+  isImporting: boolean
+  isLoading: boolean
+  isSyncing: boolean
+  onImportXml: (event: ChangeEvent<HTMLInputElement>) => void
+  onLoadInvoice: (invoiceId: string) => void
+  onMarkPaid: (invoiceId: string) => void
+}) {
+  const visibleImports = imports.slice(0, 12)
+  const matchedCount = imports.filter((transaction) =>
+    findInvoiceMatchForSavedTransaction(transaction, invoices)
+  ).length
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <BanknoteIcon data-icon="inline-start" />
+          Platby z banky
+        </CardTitle>
+        <CardDescription>
+          Import XML výpisu z Air Bank a kontrola plateb podle variabilního
+          symbolu.
+        </CardDescription>
+        <CardAction>
+          <Badge variant={matchedCount ? "secondary" : "outline"}>
+            {matchedCount}/{imports.length}
+          </Badge>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <FieldGroup>
+          <Field>
+            <FieldLabel htmlFor="airbank-xml">Air Bank XML výpis</FieldLabel>
+            <Input
+              id="airbank-xml"
+              type="file"
+              accept=".xml,application/xml,text/xml"
+              className="sr-only"
+              disabled={isImporting}
+              onChange={onImportXml}
+            />
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <Button
+                asChild
+                variant="outline"
+                className={cn(isImporting && "pointer-events-none opacity-50")}
+              >
+                <label htmlFor="airbank-xml">
+                  <UploadIcon data-icon="inline-start" />
+                  {isImporting ? "Importuji…" : "Nahrát XML"}
+                </label>
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Vezmi XML export z internetového bankovnictví Air Bank.
+              </p>
+            </div>
+          </Field>
+        </FieldGroup>
+
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="outline">{imports.length} pohybů v databázi</Badge>
+          <Badge variant="outline">{matchedCount} spárováno</Badge>
+          {isImporting ? (
+            <Badge variant="secondary">
+              <UploadIcon data-icon="inline-start" />
+              importuji
+            </Badge>
+          ) : null}
+        </div>
+
+        {isLoading ? (
+          <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+            Načítám bankovní pohyby…
+          </div>
+        ) : visibleImports.length === 0 ? (
+          <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+            Nahraj XML výpis z internetového bankovnictví Air Bank. Aplikace
+            uloží pohyby a zkusí je spárovat podle variabilního symbolu.
+          </div>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {visibleImports.map((transaction) => {
+              const match = findInvoiceMatchForSavedTransaction(
+                transaction,
+                invoices
+              )
+              const invoice = match?.invoice ?? null
+              const amountMatches = invoice
+                ? isBankAmountMatchingInvoice(transaction.amount, invoice)
+                : false
+              const canMarkPaid =
+                invoice &&
+                amountMatches &&
+                Number(transaction.amount) > 0 &&
+                invoice.status !== "paid"
+
+              return (
+                <li
+                  key={transaction.id}
+                  className="rounded-lg border bg-card p-3"
+                >
+                  <div className="flex flex-col gap-3 md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge
+                          variant={getBankMatchBadgeVariant(
+                            transaction,
+                            invoice
+                          )}
+                        >
+                          {getBankMatchLabel(
+                            transaction,
+                            invoice,
+                            amountMatches
+                          )}
+                        </Badge>
+                        <span className="font-medium tabular-nums">
+                          {formatCurrency(Number(transaction.amount) || 0)}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {formatDate(transaction.booked_at)}
+                        </span>
+                      </div>
+                      <p className="mt-1 truncate text-sm font-medium">
+                        {invoice
+                          ? `${invoice.invoice_number} · ${
+                              invoice.project_title || invoice.customer_name
+                            }`
+                          : transaction.counterparty_name ||
+                            transaction.message ||
+                            "Bankovní pohyb"}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {transaction.variable_symbol
+                          ? `VS ${transaction.variable_symbol}`
+                          : "Bez variabilního symbolu"}
+                        {transaction.counterparty_name
+                          ? ` · ${transaction.counterparty_name}`
+                          : ""}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2 md:justify-end">
+                      {invoice ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={isSyncing}
+                          onClick={() => onLoadInvoice(invoice.id)}
+                        >
+                          <PencilIcon data-icon="inline-start" />
+                          Otevřít
+                        </Button>
+                      ) : null}
+                      {canMarkPaid ? (
+                        <Button
+                          size="sm"
+                          disabled={isSyncing}
+                          onClick={() => onMarkPaid(invoice.id)}
+                        >
+                          <CheckCircle2Icon data-icon="inline-start" />
+                          Zaplaceno
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 function StatTile({
   detail,
   label,
@@ -2124,6 +2402,129 @@ function isInvoiceWaitingForSend(invoice: InvoiceSummary) {
   }
 
   return Boolean(invoice.exported_at)
+}
+
+function findInvoiceMatchForTransaction(
+  transaction: ParsedAirBankTransaction,
+  invoices: InvoiceSummary[]
+) {
+  return findInvoiceMatch(
+    {
+      amount: transaction.amount,
+      invoiceId: null,
+      message: transaction.message,
+      sourceTransactionId: transaction.sourceTransactionId,
+      variableSymbol: transaction.variableSymbol,
+    },
+    invoices
+  )
+}
+
+function findInvoiceMatchForSavedTransaction(
+  transaction: BankTransactionSummary,
+  invoices: InvoiceSummary[]
+) {
+  return findInvoiceMatch(
+    {
+      amount: Number(transaction.amount) || 0,
+      invoiceId: transaction.invoice_id,
+      message: transaction.message,
+      sourceTransactionId: transaction.source_transaction_id,
+      variableSymbol: transaction.variable_symbol,
+    },
+    invoices
+  )
+}
+
+function findInvoiceMatch(
+  transaction: {
+    amount: number
+    invoiceId: string | null
+    message: string | null
+    sourceTransactionId: string | null
+    variableSymbol: string | null
+  },
+  invoices: InvoiceSummary[]
+) {
+  if (transaction.invoiceId) {
+    const invoice = invoices.find((item) => item.id === transaction.invoiceId)
+
+    if (invoice) {
+      return { invoice, method: "stored" as const }
+    }
+  }
+
+  const symbol = normalizeBankSymbol(transaction.variableSymbol)
+  if (symbol) {
+    const invoice = invoices.find(
+      (item) => normalizeBankSymbol(item.invoice_number) === symbol
+    )
+
+    if (invoice) {
+      return { invoice, method: "variable_symbol" as const }
+    }
+  }
+
+  const searchable = normalizeBankSymbol(
+    [transaction.message, transaction.sourceTransactionId]
+      .filter(Boolean)
+      .join(" ")
+  )
+  const invoice = invoices.find((item) => {
+    const invoiceNumber = normalizeBankSymbol(item.invoice_number)
+
+    return Boolean(invoiceNumber && searchable.includes(invoiceNumber))
+  })
+
+  return invoice ? { invoice, method: "message" as const } : null
+}
+
+function isBankAmountMatchingInvoice(
+  amount: number | string,
+  invoice: InvoiceSummary
+) {
+  return Math.abs(Number(amount) - Number(invoice.total_amount)) < 0.01
+}
+
+function getBankMatchLabel(
+  transaction: BankTransactionSummary,
+  invoice: InvoiceSummary | null,
+  amountMatches: boolean
+) {
+  if (invoice?.status === "paid" && amountMatches) {
+    return "zaplaceno"
+  }
+
+  if (invoice && amountMatches) {
+    return "nalezená platba"
+  }
+
+  if (invoice) {
+    return "částka nesedí"
+  }
+
+  if (transaction.variable_symbol) {
+    return "neznámý VS"
+  }
+
+  return "bez VS"
+}
+
+function getBankMatchBadgeVariant(
+  transaction: BankTransactionSummary,
+  invoice: InvoiceSummary | null
+): "default" | "secondary" | "outline" | "destructive" {
+  if (!invoice) {
+    return transaction.variable_symbol ? "outline" : "secondary"
+  }
+
+  return isBankAmountMatchingInvoice(transaction.amount, invoice)
+    ? "default"
+    : "destructive"
+}
+
+function normalizeBankSymbol(value: string | null | undefined) {
+  return value?.replace(/\D/g, "") ?? ""
 }
 
 function SortHeader({

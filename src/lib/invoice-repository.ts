@@ -11,8 +11,12 @@ import { getSupabaseClient } from "@/lib/supabase"
 
 type InvoiceRow = Database["public"]["Tables"]["invoices"]["Row"]
 type InvoiceLineRow = Database["public"]["Tables"]["invoice_lines"]["Row"]
+type BankTransactionRow =
+  Database["public"]["Tables"]["bank_transactions"]["Row"]
 type InvoiceInsert = Database["public"]["Tables"]["invoices"]["Insert"]
 type InvoiceLineInsert = Database["public"]["Tables"]["invoice_lines"]["Insert"]
+type BankTransactionInsert =
+  Database["public"]["Tables"]["bank_transactions"]["Insert"]
 
 export type InvoiceSummary = Pick<
   InvoiceRow,
@@ -39,6 +43,36 @@ type InvoiceWithLines = InvoiceRow & {
   invoice_lines: InvoiceLineRow[]
 }
 
+export type BankTransactionSummary = Pick<
+  BankTransactionRow,
+  | "id"
+  | "invoice_id"
+  | "source_transaction_id"
+  | "account_iban"
+  | "counterparty_account"
+  | "counterparty_name"
+  | "booked_at"
+  | "amount"
+  | "currency"
+  | "variable_symbol"
+  | "message"
+  | "created_at"
+>
+
+export type BankTransactionImport = {
+  invoiceId: string | null
+  sourceTransactionId: string
+  accountIban: string | null
+  counterpartyAccount: string | null
+  counterpartyName: string | null
+  bookedAt: string
+  amount: number
+  currency: string
+  variableSymbol: string | null
+  message: string | null
+  rawData: BankTransactionInsert["raw_data"]
+}
+
 export async function listInvoices() {
   const supabase = getSupabaseClient()
   const { data, error } = await supabase
@@ -54,6 +88,24 @@ export async function listInvoices() {
   }
 
   return data satisfies InvoiceSummary[]
+}
+
+export async function listBankTransactions() {
+  const supabase = getSupabaseClient()
+  const { data, error } = await supabase
+    .from("bank_transactions")
+    .select(
+      "id, invoice_id, source_transaction_id, account_iban, counterparty_account, counterparty_name, booked_at, amount, currency, variable_symbol, message, created_at"
+    )
+    .order("booked_at", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(100)
+
+  if (error) {
+    throw error
+  }
+
+  return data satisfies BankTransactionSummary[]
 }
 
 export async function loadInvoice(id: string) {
@@ -130,6 +182,48 @@ export async function deleteInvoice(id: string) {
   if (error) {
     throw error
   }
+}
+
+export async function importBankTransactions(
+  transactions: BankTransactionImport[],
+  user: User
+) {
+  if (transactions.length === 0) {
+    return []
+  }
+
+  const supabase = getSupabaseClient()
+  const rows = transactions.map((transaction): BankTransactionInsert => {
+    return {
+      owner_id: user.id,
+      invoice_id: transaction.invoiceId,
+      source: "airbank_xml",
+      source_transaction_id: transaction.sourceTransactionId,
+      account_iban: transaction.accountIban,
+      counterparty_account: transaction.counterpartyAccount,
+      counterparty_name: transaction.counterpartyName,
+      booked_at: transaction.bookedAt,
+      amount: transaction.amount,
+      currency: transaction.currency,
+      variable_symbol: transaction.variableSymbol,
+      message: transaction.message,
+      raw_data: transaction.rawData,
+    }
+  })
+  const { data, error } = await supabase
+    .from("bank_transactions")
+    .upsert(rows, {
+      onConflict: "owner_id,source,source_transaction_id",
+    })
+    .select(
+      "id, invoice_id, source_transaction_id, account_iban, counterparty_account, counterparty_name, booked_at, amount, currency, variable_symbol, message, created_at"
+    )
+
+  if (error) {
+    throw error
+  }
+
+  return data satisfies BankTransactionSummary[]
 }
 
 export async function markInvoiceExported(id: string) {
