@@ -22,12 +22,16 @@ export type Database = {
           customer_address: string
           customer_company_id: string
           customer_tax_id: string
+          contact_name: string
+          contact_email: string
+          contact_phone: string
           status: "draft" | "issued" | "paid" | "overdue" | "cancelled"
           paid_at: string | null
           total_amount: number
           currency: string
           exported_at: string | null
           export_count: number
+          last_reminded_at: string | null
           created_at: string
           updated_at: string
         }
@@ -43,12 +47,16 @@ export type Database = {
           customer_address?: string
           customer_company_id?: string
           customer_tax_id?: string
+          contact_name?: string
+          contact_email?: string
+          contact_phone?: string
           status?: "draft" | "issued" | "paid" | "overdue" | "cancelled"
           paid_at?: string | null
           total_amount?: number
           currency?: string
           exported_at?: string | null
           export_count?: number
+          last_reminded_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -64,12 +72,16 @@ export type Database = {
           customer_address?: string
           customer_company_id?: string
           customer_tax_id?: string
+          contact_name?: string
+          contact_email?: string
+          contact_phone?: string
           status?: "draft" | "issued" | "paid" | "overdue" | "cancelled"
           paid_at?: string | null
           total_amount?: number
           currency?: string
           exported_at?: string | null
           export_count?: number
+          last_reminded_at?: string | null
           created_at?: string
           updated_at?: string
         }

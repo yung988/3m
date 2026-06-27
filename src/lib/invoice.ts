@@ -26,10 +26,14 @@ export type InvoiceDraft = {
   customerAddress: string
   customerCompanyId: string
   customerTaxId: string
+  contactName: string
+  contactEmail: string
+  contactPhone: string
   status: InvoiceStatus
   paidAt: string | null
   exportedAt: string | null
   exportCount: number
+  lastRemindedAt: string | null
   lines: InvoiceLine[]
 }
 
@@ -170,10 +174,14 @@ export function createDefaultDraft(): InvoiceDraft {
     customerAddress: "Kaštanová 489/34\n62000 Brno\nČeská republika",
     customerCompanyId: "14054001",
     customerTaxId: "CZ14054001",
+    contactName: "",
+    contactEmail: "",
+    contactPhone: "",
     status: "draft",
     paidAt: null,
     exportedAt: null,
     exportCount: 0,
+    lastRemindedAt: null,
     lines: [],
   }
 }

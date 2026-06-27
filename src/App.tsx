@@ -24,9 +24,11 @@ import {
   FilePlus2Icon,
   LayoutDashboardIcon,
   LogOutIcon,
+  MailIcon,
   MessageSquareTextIcon,
   MinusIcon,
   PencilIcon,
+  PhoneCallIcon,
   PlusCircleIcon,
   PlusIcon,
   PrinterIcon,
@@ -120,6 +122,7 @@ import {
   listInvoices,
   loadInvoice,
   markInvoiceExported,
+  markInvoiceReminded,
   markInvoiceSent,
   saveInvoice,
   setInvoicePaid,
@@ -707,12 +710,28 @@ function App() {
   async function handleCopyReminder(invoice: InvoiceSummary) {
     try {
       await copyTextToClipboard(buildPaymentReminderText(invoice))
-      setMessage({
-        title: "Upomínka zkopírována",
-        description: `Text pro fakturu ${invoice.invoice_number} je připravený ve schránce.`,
-      })
     } catch (error) {
       showError("Kopírování upomínky selhalo", error)
+      return
+    }
+
+    try {
+      setSyncing(true)
+      const updatedDraft = await markInvoiceReminded(invoice.id)
+
+      if (draft.id === invoice.id) {
+        setDraft(updatedDraft)
+      }
+
+      await refreshSavedInvoices()
+      setMessage({
+        title: "Upomínka zkopírována",
+        description: `Text pro fakturu ${invoice.invoice_number} je ve schránce a doklad je označený jako upomenutý.`,
+      })
+    } catch (error) {
+      showError("Upomínka je ve schránce, ale označení selhalo", error)
+    } finally {
+      setSyncing(false)
     }
   }
 
@@ -860,6 +879,7 @@ function App() {
         paidAt: null,
         exportedAt: null,
         exportCount: 0,
+        lastRemindedAt: null,
       })
       setView("editor")
       setPreviewVisible(false)
@@ -1220,7 +1240,7 @@ function App() {
                   />
                 </Field>
               </FieldGroup>
-              <FieldGroup className="grid grid-cols-2 gap-4">
+              <FieldGroup className="grid gap-4 sm:grid-cols-2">
                 <Field>
                   <FieldLabel htmlFor="customer-id">IČO</FieldLabel>
                   <Input
@@ -1238,6 +1258,47 @@ function App() {
                     value={draft.customerTaxId}
                     onChange={(event) =>
                       updateDraftField("customerTaxId", event.target.value)
+                    }
+                  />
+                </Field>
+              </FieldGroup>
+              <FieldGroup className="grid gap-4 md:grid-cols-3">
+                <Field>
+                  <FieldLabel htmlFor="contact-name">Kontakt</FieldLabel>
+                  <Input
+                    id="contact-name"
+                    value={draft.contactName}
+                    placeholder="Jméno člověka"
+                    onChange={(event) =>
+                      updateDraftField("contactName", event.target.value)
+                    }
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="contact-email">
+                    E-mail kontaktu
+                  </FieldLabel>
+                  <Input
+                    id="contact-email"
+                    type="email"
+                    inputMode="email"
+                    value={draft.contactEmail}
+                    placeholder="firma@example.cz"
+                    onChange={(event) =>
+                      updateDraftField("contactEmail", event.target.value)
+                    }
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="contact-phone">Telefon</FieldLabel>
+                  <Input
+                    id="contact-phone"
+                    type="tel"
+                    inputMode="tel"
+                    value={draft.contactPhone}
+                    placeholder="+420"
+                    onChange={(event) =>
+                      updateDraftField("contactPhone", event.target.value)
                     }
                   />
                 </Field>
@@ -1863,77 +1924,118 @@ function InvoiceFollowUpCard({
           </div>
         ) : (
           <ul className="flex flex-col gap-2">
-            {followUps.map(({ daysUntilDue, invoice, urgency }) => (
-              <li
-                key={invoice.id}
-                className={cn(
-                  "rounded-lg border bg-card p-3",
-                  urgency === "overdue" &&
-                    "border-destructive/30 bg-destructive/5"
-                )}
-              >
-                <div className="flex flex-col gap-3 md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
-                  <button
-                    type="button"
-                    className="min-w-0 text-left"
-                    onClick={() => onLoad(invoice.id)}
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge
-                        variant={
-                          urgency === "overdue" ? "destructive" : "secondary"
-                        }
-                      >
-                        {urgency === "overdue" ? (
-                          <TriangleAlertIcon data-icon="inline-start" />
-                        ) : (
-                          <Clock3Icon data-icon="inline-start" />
-                        )}
-                        {formatDueDistance(daysUntilDue)}
-                      </Badge>
-                      <span className="font-medium">
-                        {invoice.invoice_number}
-                      </span>
-                    </div>
-                    <p className="mt-1 truncate text-sm font-medium">
-                      {invoice.project_title || invoice.customer_name}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {formatCurrency(Number(invoice.total_amount) || 0)} ·
-                      splatnost {formatDate(invoice.due_date)}
-                    </p>
-                  </button>
-                  <div className="flex flex-wrap gap-2 md:justify-end">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={isSyncing}
-                      onClick={() => onCopyReminder(invoice)}
-                    >
-                      <ClipboardCopyIcon data-icon="inline-start" />
-                      Upomínka
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={isSyncing}
+            {followUps.map(({ daysUntilDue, invoice, urgency }) => {
+              const contactLine = formatInvoiceContactLine(invoice)
+              const mailtoHref = buildReminderMailtoHref(invoice)
+              const smsHref = buildReminderSmsHref(invoice)
+              const telHref = buildContactTelHref(invoice)
+
+              return (
+                <li
+                  key={invoice.id}
+                  className={cn(
+                    "rounded-lg border bg-card p-3",
+                    urgency === "overdue" &&
+                      "border-destructive/30 bg-destructive/5"
+                  )}
+                >
+                  <div className="flex flex-col gap-3 md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+                    <button
+                      type="button"
+                      className="min-w-0 text-left"
                       onClick={() => onLoad(invoice.id)}
                     >
-                      <PencilIcon data-icon="inline-start" />
-                      Otevřít
-                    </Button>
-                    <Button
-                      size="sm"
-                      disabled={isSyncing}
-                      onClick={() => onTogglePaid(invoice.id, true)}
-                    >
-                      <CheckCircle2Icon data-icon="inline-start" />
-                      Zaplaceno
-                    </Button>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge
+                          variant={
+                            urgency === "overdue" ? "destructive" : "secondary"
+                          }
+                        >
+                          {urgency === "overdue" ? (
+                            <TriangleAlertIcon data-icon="inline-start" />
+                          ) : (
+                            <Clock3Icon data-icon="inline-start" />
+                          )}
+                          {formatDueDistance(daysUntilDue)}
+                        </Badge>
+                        <span className="font-medium">
+                          {invoice.invoice_number}
+                        </span>
+                        {invoice.last_reminded_at ? (
+                          <Badge variant="outline">
+                            upomenuto {formatDateTime(invoice.last_reminded_at)}
+                          </Badge>
+                        ) : null}
+                      </div>
+                      <p className="mt-1 truncate text-sm font-medium">
+                        {invoice.project_title || invoice.customer_name}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {formatCurrency(Number(invoice.total_amount) || 0)} ·
+                        splatnost {formatDate(invoice.due_date)}
+                      </p>
+                      {contactLine ? (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {contactLine}
+                        </p>
+                      ) : null}
+                    </button>
+                    <div className="flex flex-wrap gap-2 md:justify-end">
+                      {mailtoHref ? (
+                        <Button size="sm" variant="outline" asChild>
+                          <a href={mailtoHref}>
+                            <MailIcon data-icon="inline-start" />
+                            E-mail
+                          </a>
+                        </Button>
+                      ) : null}
+                      {telHref ? (
+                        <Button size="sm" variant="outline" asChild>
+                          <a href={telHref}>
+                            <PhoneCallIcon data-icon="inline-start" />
+                            Volat
+                          </a>
+                        </Button>
+                      ) : null}
+                      {smsHref ? (
+                        <Button size="sm" variant="outline" asChild>
+                          <a href={smsHref}>
+                            <MessageSquareTextIcon data-icon="inline-start" />
+                            SMS
+                          </a>
+                        </Button>
+                      ) : null}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={isSyncing}
+                        onClick={() => onCopyReminder(invoice)}
+                      >
+                        <ClipboardCopyIcon data-icon="inline-start" />
+                        Upomínka
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={isSyncing}
+                        onClick={() => onLoad(invoice.id)}
+                      >
+                        <PencilIcon data-icon="inline-start" />
+                        Otevřít
+                      </Button>
+                      <Button
+                        size="sm"
+                        disabled={isSyncing}
+                        onClick={() => onTogglePaid(invoice.id, true)}
+                      >
+                        <CheckCircle2Icon data-icon="inline-start" />
+                        Zaplaceno
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              </li>
-            ))}
+                </li>
+              )
+            })}
           </ul>
         )}
       </CardContent>
@@ -2960,9 +3062,12 @@ function buildPaymentReminderText(invoice: InvoiceSummary) {
     daysUntilDue !== null && daysUntilDue < 0
       ? `Splatnost byla ${formatDate(invoice.due_date)}.`
       : `Splatnost je ${formatDate(invoice.due_date)}.`
+  const greeting = invoice.contact_name.trim()
+    ? `Dobrý den, ${invoice.contact_name.trim()},`
+    : "Dobrý den,"
 
   return [
-    "Dobrý den,",
+    greeting,
     "",
     `${intro} ${invoice.invoice_number}${project ? ` za ${project}` : ""} na částku ${amount}. ${dueText}`,
     "V evidenci ji mám zatím jako neuhrazenou. Prosím o kontrolu platby a případně o informaci, kdy bude odeslaná.",
@@ -2970,6 +3075,62 @@ function buildPaymentReminderText(invoice: InvoiceSummary) {
     "Děkuji,",
     supplier.name,
   ].join("\n")
+}
+
+function formatInvoiceContactLine(invoice: InvoiceSummary) {
+  return [
+    invoice.contact_name.trim(),
+    invoice.contact_email.trim(),
+    invoice.contact_phone.trim(),
+  ]
+    .filter(Boolean)
+    .join(" · ")
+}
+
+function buildReminderMailtoHref(invoice: InvoiceSummary) {
+  const email = invoice.contact_email.trim()
+
+  if (!email) {
+    return null
+  }
+
+  const subject = encodeURIComponent(buildReminderSubject(invoice))
+  const body = encodeURIComponent(buildPaymentReminderText(invoice))
+
+  return `mailto:${email}?subject=${subject}&body=${body}`
+}
+
+function buildReminderSmsHref(invoice: InvoiceSummary) {
+  const phone = normalizePhoneHref(invoice.contact_phone)
+
+  if (!phone) {
+    return null
+  }
+
+  return `sms:${phone}?&body=${encodeURIComponent(buildPaymentReminderText(invoice))}`
+}
+
+function buildContactTelHref(invoice: InvoiceSummary) {
+  const phone = normalizePhoneHref(invoice.contact_phone)
+
+  return phone ? `tel:${phone}` : null
+}
+
+function buildReminderSubject(invoice: InvoiceSummary) {
+  return `Upomínka faktury ${invoice.invoice_number}`
+}
+
+function normalizePhoneHref(value: string) {
+  const trimmed = value.trim()
+
+  if (!trimmed) {
+    return null
+  }
+
+  const prefix = trimmed.startsWith("+") ? "+" : ""
+  const digits = trimmed.replace(/\D/g, "")
+
+  return digits ? `${prefix}${digits}` : null
 }
 
 async function copyTextToClipboard(text: string) {

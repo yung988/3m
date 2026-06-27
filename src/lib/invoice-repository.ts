@@ -19,6 +19,9 @@ export type InvoiceSummary = Pick<
   | "id"
   | "invoice_number"
   | "customer_name"
+  | "contact_name"
+  | "contact_email"
+  | "contact_phone"
   | "issue_date"
   | "due_date"
   | "project_title"
@@ -28,6 +31,7 @@ export type InvoiceSummary = Pick<
   | "total_amount"
   | "exported_at"
   | "export_count"
+  | "last_reminded_at"
   | "updated_at"
 >
 
@@ -40,7 +44,7 @@ export async function listInvoices() {
   const { data, error } = await supabase
     .from("invoices")
     .select(
-      "id, invoice_number, customer_name, issue_date, due_date, project_title, project_subtitle, status, paid_at, total_amount, exported_at, export_count, updated_at"
+      "id, invoice_number, customer_name, contact_name, contact_email, contact_phone, issue_date, due_date, project_title, project_subtitle, status, paid_at, total_amount, exported_at, export_count, last_reminded_at, updated_at"
     )
     .order("issue_date", { ascending: false })
     .order("updated_at", { ascending: false })
@@ -147,6 +151,24 @@ export async function markInvoiceExported(id: string) {
   return fromInvoiceRow(data as InvoiceWithLines)
 }
 
+export async function markInvoiceReminded(id: string) {
+  const supabase = getSupabaseClient()
+  const { data, error } = await supabase
+    .from("invoices")
+    .update({
+      last_reminded_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .select("*, invoice_lines(*)")
+    .single()
+
+  if (error) {
+    throw error
+  }
+
+  return fromInvoiceRow(data as InvoiceWithLines)
+}
+
 export async function markInvoiceSent(id: string) {
   const supabase = getSupabaseClient()
   const { data, error } = await supabase
@@ -196,10 +218,14 @@ function toInvoicePayload(draft: InvoiceDraft, user: User): InvoiceInsert {
     customer_address: draft.customerAddress,
     customer_company_id: draft.customerCompanyId,
     customer_tax_id: draft.customerTaxId,
+    contact_name: draft.contactName,
+    contact_email: draft.contactEmail,
+    contact_phone: draft.contactPhone,
     status: draft.status,
     paid_at: draft.paidAt,
     exported_at: draft.exportedAt,
     export_count: draft.exportCount,
+    last_reminded_at: draft.lastRemindedAt,
     total_amount: calculateTotal(draft.lines),
     currency: "CZK",
   }
@@ -229,10 +255,14 @@ function fromInvoiceRow(row: InvoiceWithLines): InvoiceDraft {
     customerAddress: row.customer_address,
     customerCompanyId: row.customer_company_id,
     customerTaxId: row.customer_tax_id,
+    contactName: row.contact_name,
+    contactEmail: row.contact_email,
+    contactPhone: row.contact_phone,
     status: row.status as InvoiceStatus,
     paidAt: row.paid_at,
     exportedAt: row.exported_at,
     exportCount: row.export_count,
+    lastRemindedAt: row.last_reminded_at,
     lines,
   }
 }
