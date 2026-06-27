@@ -175,6 +175,17 @@ type InvoiceFollowUpItem = {
   urgency: "overdue" | "soon"
 }
 
+type BankImportPreviewItem = {
+  transaction: ParsedAirBankTransaction
+  invoice: InvoiceSummary | null
+  amountMatches: boolean
+}
+
+type BankImportPreview = {
+  fileName: string
+  items: BankImportPreviewItem[]
+}
+
 function isLineForPriceItem(line: InvoiceLine, item: PriceItem) {
   return (
     line.description === item.name &&
@@ -312,6 +323,8 @@ function App() {
   >([])
   const [bankTransactionsLoading, setBankTransactionsLoading] = useState(false)
   const [bankImporting, setBankImporting] = useState(false)
+  const [bankImportPreview, setBankImportPreview] =
+    useState<BankImportPreview | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [message, setMessage] = useState<AppMessage | null>(null)
   const [view, setView] = useState<AppView>("dashboard")
@@ -418,6 +431,7 @@ function App() {
       if (!nextSession) {
         setSavedInvoices([])
         setBankTransactions([])
+        setBankImportPreview(null)
         setView("dashboard")
       }
     })
@@ -764,7 +778,7 @@ function App() {
     }
   }
 
-  async function handleImportBankXml(event: ChangeEvent<HTMLInputElement>) {
+  async function handlePreviewBankXml(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
     event.target.value = ""
 
@@ -783,31 +797,43 @@ function App() {
 
     try {
       setBankImporting(true)
+      setBankImportPreview(null)
       const parsed = parseAirBankXml(await file.text())
-      const rows = parsed.map((transaction): BankTransactionImport => {
-        const match = findInvoiceMatchForTransaction(transaction, savedInvoices)
+      const items = createBankImportPreviewItems(parsed, savedInvoices)
+      const stats = createBankImportPreviewStats(items)
 
-        return {
-          invoiceId: match?.invoice.id ?? null,
-          sourceTransactionId: transaction.sourceTransactionId,
-          accountIban: transaction.accountIban,
-          counterpartyAccount: transaction.counterpartyAccount,
-          counterpartyName: transaction.counterpartyName,
-          bookedAt: transaction.bookedAt,
-          amount: transaction.amount,
-          currency: transaction.currency,
-          variableSymbol: transaction.variableSymbol,
-          message: transaction.message,
-          rawData: transaction.rawData,
-        }
+      setBankImportPreview({
+        fileName: file.name,
+        items,
       })
+
+      setMessage({
+        title: "Výpis připraven ke kontrole",
+        description: `${items.length} pohybů načteno. ${stats.readyCount} připraveno ke spárování, ${stats.amountMismatchCount} s nesedící částkou.`,
+      })
+    } catch (error) {
+      showError("Načtení bankovního XML selhalo", error)
+    } finally {
+      setBankImporting(false)
+    }
+  }
+
+  async function handleConfirmBankImport() {
+    if (!bankImportPreview || !user) {
+      return
+    }
+
+    try {
+      setBankImporting(true)
+      const rows = bankImportPreview.items.map(toBankTransactionImport)
       const imported = await importBankTransactions(rows, user)
       await refreshBankTransactions()
 
-      const matchedCount = rows.filter((row) => row.invoiceId).length
+      const stats = createBankImportPreviewStats(bankImportPreview.items)
+      setBankImportPreview(null)
       setMessage({
         title: "Bankovní výpis importován",
-        description: `${imported.length} pohybů uloženo nebo aktualizováno. ${matchedCount} z nich jsem našel podle variabilního symbolu.`,
+        description: `${imported.length} pohybů uloženo nebo aktualizováno. ${stats.matchedCount} z nich je spárovaných s fakturami.`,
       })
     } catch (error) {
       showError("Import bankovního XML selhal", error)
@@ -1118,12 +1144,15 @@ function App() {
             onTogglePaid={handleTogglePaid}
           />
           <BankTransactionsCard
+            importPreview={bankImportPreview}
             imports={bankTransactions}
             invoices={savedInvoices}
             isImporting={bankImporting}
-            isLoading={bankTransactionsLoading}
+            isLoading={bankTransactionsLoading || savedInvoicesLoading}
             isSyncing={syncing}
-            onImportXml={handleImportBankXml}
+            onCancelImport={() => setBankImportPreview(null)}
+            onConfirmImport={handleConfirmBankImport}
+            onImportXml={handlePreviewBankXml}
             onLoadInvoice={handleLoadInvoice}
             onMarkPaid={(invoiceId) => handleTogglePaid(invoiceId, true)}
           />
@@ -2135,25 +2164,37 @@ function InvoiceFollowUpCard({
 }
 
 function BankTransactionsCard({
+  importPreview,
   imports,
   invoices,
   isImporting,
   isLoading,
   isSyncing,
+  onCancelImport,
+  onConfirmImport,
   onImportXml,
   onLoadInvoice,
   onMarkPaid,
 }: {
+  importPreview: BankImportPreview | null
   imports: BankTransactionSummary[]
   invoices: InvoiceSummary[]
   isImporting: boolean
   isLoading: boolean
   isSyncing: boolean
+  onCancelImport: () => void
+  onConfirmImport: () => void
   onImportXml: (event: ChangeEvent<HTMLInputElement>) => void
   onLoadInvoice: (invoiceId: string) => void
   onMarkPaid: (invoiceId: string) => void
 }) {
   const visibleImports = imports.slice(0, 12)
+  const visiblePreviewItems = importPreview?.items.slice(0, 8) ?? []
+  const hiddenPreviewCount =
+    importPreview === null
+      ? 0
+      : Math.max(importPreview.items.length - visiblePreviewItems.length, 0)
+  const previewStats = createBankImportPreviewStats(importPreview?.items ?? [])
   const matchedCount = imports.filter((transaction) =>
     findInvoiceMatchForSavedTransaction(transaction, invoices)
   ).length
@@ -2184,22 +2225,28 @@ function BankTransactionsCard({
               type="file"
               accept=".xml,application/xml,text/xml"
               className="sr-only"
-              disabled={isImporting}
+              disabled={isImporting || isLoading}
               onChange={onImportXml}
             />
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <Button
                 asChild
                 variant="outline"
-                className={cn(isImporting && "pointer-events-none opacity-50")}
+                className={cn(
+                  (isImporting || isLoading) && "pointer-events-none opacity-50"
+                )}
               >
                 <label htmlFor="airbank-xml">
                   <UploadIcon data-icon="inline-start" />
-                  {isImporting ? "Importuji…" : "Nahrát XML"}
+                  {isLoading
+                    ? "Načítám…"
+                    : isImporting
+                      ? "Zpracovávám…"
+                      : "Nahrát XML"}
                 </label>
               </Button>
               <p className="text-xs text-muted-foreground">
-                Vezmi XML export z internetového bankovnictví Air Bank.
+                Nejdřív se ukáže náhled, do databáze se uloží až po potvrzení.
               </p>
             </div>
           </Field>
@@ -2216,9 +2263,136 @@ function BankTransactionsCard({
           ) : null}
         </div>
 
+        {importPreview ? (
+          <div className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold">Náhled importu</h3>
+                <p className="truncate text-xs text-muted-foreground">
+                  {importPreview.fileName}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="outline">
+                  {importPreview.items.length} pohybů
+                </Badge>
+                <Badge
+                  variant={previewStats.readyCount ? "default" : "outline"}
+                >
+                  {previewStats.readyCount} připraveno
+                </Badge>
+                {previewStats.alreadyPaidCount ? (
+                  <Badge variant="secondary">
+                    {previewStats.alreadyPaidCount} už zaplaceno
+                  </Badge>
+                ) : null}
+                {previewStats.amountMismatchCount ? (
+                  <Badge variant="destructive">
+                    {previewStats.amountMismatchCount} nesedí částka
+                  </Badge>
+                ) : null}
+                {previewStats.unknownSymbolCount ? (
+                  <Badge variant="outline">
+                    {previewStats.unknownSymbolCount} neznámý VS
+                  </Badge>
+                ) : null}
+                {previewStats.missingSymbolCount ? (
+                  <Badge variant="secondary">
+                    {previewStats.missingSymbolCount} bez VS
+                  </Badge>
+                ) : null}
+              </div>
+            </div>
+
+            <ul className="flex flex-col gap-2">
+              {visiblePreviewItems.map((item, index) => {
+                const invoice = item.invoice
+
+                return (
+                  <li
+                    key={`${item.transaction.sourceTransactionId}-${index}`}
+                    className="rounded-md border bg-background p-3"
+                  >
+                    <div className="flex flex-col gap-2 md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant={getBankPreviewBadgeVariant(item)}>
+                            {getBankPreviewLabel(item)}
+                          </Badge>
+                          <span className="font-medium tabular-nums">
+                            {formatCurrency(item.transaction.amount)}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {formatDate(item.transaction.bookedAt)}
+                          </span>
+                        </div>
+                        <p className="mt-1 truncate text-sm font-medium">
+                          {invoice
+                            ? `${invoice.invoice_number} · ${
+                                invoice.project_title || invoice.customer_name
+                              }`
+                            : item.transaction.counterpartyName ||
+                              item.transaction.message ||
+                              "Bankovní pohyb"}
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {item.transaction.variableSymbol
+                            ? `VS ${item.transaction.variableSymbol}`
+                            : "Bez variabilního symbolu"}
+                          {invoice && !item.amountMatches
+                            ? ` · faktura ${formatCurrency(Number(invoice.total_amount) || 0)}`
+                            : ""}
+                        </p>
+                      </div>
+                      {invoice ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full md:w-auto"
+                          disabled={isSyncing || isImporting}
+                          onClick={() => onLoadInvoice(invoice.id)}
+                        >
+                          <PencilIcon data-icon="inline-start" />
+                          Otevřít
+                        </Button>
+                      ) : null}
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+
+            {hiddenPreviewCount > 0 ? (
+              <p className="text-xs text-muted-foreground">
+                Dalších {hiddenPreviewCount} pohybů se uloží stejným potvrzením.
+              </p>
+            ) : null}
+
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isImporting}
+                onClick={onCancelImport}
+              >
+                <XIcon data-icon="inline-start" />
+                Zahodit
+              </Button>
+              <Button
+                type="button"
+                disabled={isImporting || importPreview.items.length === 0}
+                onClick={onConfirmImport}
+              >
+                <CheckCircle2Icon data-icon="inline-start" />
+                {isImporting ? "Ukládám…" : "Potvrdit import"}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
         {isLoading ? (
           <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-            Načítám bankovní pohyby…
+            Načítám faktury a bankovní pohyby…
           </div>
         ) : visibleImports.length === 0 ? (
           <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
@@ -2404,6 +2578,74 @@ function isInvoiceWaitingForSend(invoice: InvoiceSummary) {
   return Boolean(invoice.exported_at)
 }
 
+function createBankImportPreviewItems(
+  transactions: ParsedAirBankTransaction[],
+  invoices: InvoiceSummary[]
+): BankImportPreviewItem[] {
+  return transactions.map((transaction) => {
+    const match = findInvoiceMatchForTransaction(transaction, invoices)
+    const invoice = match?.invoice ?? null
+
+    return {
+      transaction,
+      invoice,
+      amountMatches: invoice
+        ? isBankAmountMatchingInvoice(transaction.amount, invoice)
+        : false,
+    }
+  })
+}
+
+function toBankTransactionImport(
+  item: BankImportPreviewItem
+): BankTransactionImport {
+  return {
+    invoiceId: item.invoice?.id ?? null,
+    sourceTransactionId: item.transaction.sourceTransactionId,
+    accountIban: item.transaction.accountIban,
+    counterpartyAccount: item.transaction.counterpartyAccount,
+    counterpartyName: item.transaction.counterpartyName,
+    bookedAt: item.transaction.bookedAt,
+    amount: item.transaction.amount,
+    currency: item.transaction.currency,
+    variableSymbol: item.transaction.variableSymbol,
+    message: item.transaction.message,
+    rawData: item.transaction.rawData,
+  }
+}
+
+function createBankImportPreviewStats(items: BankImportPreviewItem[]) {
+  const matchedCount = items.filter((item) => item.invoice).length
+  const readyCount = items.filter(
+    (item) =>
+      item.invoice &&
+      item.amountMatches &&
+      Number(item.transaction.amount) > 0 &&
+      item.invoice.status !== "paid"
+  ).length
+  const alreadyPaidCount = items.filter(
+    (item) => item.invoice?.status === "paid" && item.amountMatches
+  ).length
+  const amountMismatchCount = items.filter(
+    (item) => item.invoice && !item.amountMatches
+  ).length
+  const unknownSymbolCount = items.filter(
+    (item) => item.transaction.variableSymbol && !item.invoice
+  ).length
+  const missingSymbolCount = items.filter(
+    (item) => !item.transaction.variableSymbol
+  ).length
+
+  return {
+    matchedCount,
+    readyCount,
+    alreadyPaidCount,
+    amountMismatchCount,
+    unknownSymbolCount,
+    missingSymbolCount,
+  }
+}
+
 function findInvoiceMatchForTransaction(
   transaction: ParsedAirBankTransaction,
   invoices: InvoiceSummary[]
@@ -2521,6 +2763,40 @@ function getBankMatchBadgeVariant(
   return isBankAmountMatchingInvoice(transaction.amount, invoice)
     ? "default"
     : "destructive"
+}
+
+function getBankPreviewLabel(item: BankImportPreviewItem) {
+  if (item.invoice?.status === "paid" && item.amountMatches) {
+    return "už zaplaceno"
+  }
+
+  if (item.invoice && item.amountMatches) {
+    return "připraveno"
+  }
+
+  if (item.invoice) {
+    return "částka nesedí"
+  }
+
+  if (item.transaction.variableSymbol) {
+    return "neznámý VS"
+  }
+
+  return "bez VS"
+}
+
+function getBankPreviewBadgeVariant(
+  item: BankImportPreviewItem
+): "default" | "secondary" | "outline" | "destructive" {
+  if (item.invoice && !item.amountMatches) {
+    return "destructive"
+  }
+
+  if (item.invoice && item.amountMatches) {
+    return "default"
+  }
+
+  return item.transaction.variableSymbol ? "outline" : "secondary"
 }
 
 function normalizeBankSymbol(value: string | null | undefined) {
