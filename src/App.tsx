@@ -1983,6 +1983,16 @@ function InvoiceStatsCard({ invoices }: { invoices: InvoiceSummary[] }) {
             value={formatCurrency(stats.waitingPaymentTotal)}
             detail={formatInvoiceCount(stats.waitingPaymentCount)}
           />
+          <StatTile
+            label="Tento měsíc"
+            value={formatCurrency(stats.thisMonthTotal)}
+            detail={formatInvoiceCount(stats.thisMonthCount)}
+          />
+          <StatTile
+            label="Letos"
+            value={formatCurrency(stats.thisYearTotal)}
+            detail={formatInvoiceCount(stats.thisYearCount)}
+          />
         </div>
 
         <Separator />
@@ -3710,6 +3720,10 @@ function printInvoicePdf(draft: InvoiceDraft) {
 }
 
 function createInvoiceStats(invoices: InvoiceSummary[]) {
+  const now = new Date()
+  const currentYear = String(now.getFullYear())
+  const currentMonth = `${currentYear}-${String(now.getMonth() + 1).padStart(2, "0")}`
+
   return invoices.reduce(
     (stats, invoice) => {
       const amount = Number(invoice.total_amount) || 0
@@ -3731,20 +3745,30 @@ function createInvoiceStats(invoices: InvoiceSummary[]) {
       if (isPaid) {
         stats.paidCount += 1
         stats.paidTotal += amount
-        return stats
+      } else {
+        stats.unpaidCount += 1
+        stats.unpaidTotal += amount
+        stats.activeTotal += amount
+
+        if (isInvoiceOverdue(invoice)) {
+          stats.overdueCount += 1
+          stats.overdueTotal += amount
+        }
+
+        stats.waitingPaymentCount += 1
+        stats.waitingPaymentTotal += amount
       }
 
-      stats.unpaidCount += 1
-      stats.unpaidTotal += amount
-      stats.activeTotal += amount
-
-      if (isInvoiceOverdue(invoice)) {
-        stats.overdueCount += 1
-        stats.overdueTotal += amount
+      // Příjmy podle období (paid + issued, bez draft/cancelled)
+      const issueDate = invoice.issue_date ?? ""
+      if (issueDate.startsWith(currentMonth)) {
+        stats.thisMonthCount += 1
+        stats.thisMonthTotal += amount
       }
-
-      stats.waitingPaymentCount += 1
-      stats.waitingPaymentTotal += amount
+      if (issueDate.startsWith(currentYear)) {
+        stats.thisYearCount += 1
+        stats.thisYearTotal += amount
+      }
 
       return stats
     },
@@ -3755,6 +3779,10 @@ function createInvoiceStats(invoices: InvoiceSummary[]) {
       overdueTotal: 0,
       paidCount: 0,
       paidTotal: 0,
+      thisMonthCount: 0,
+      thisMonthTotal: 0,
+      thisYearCount: 0,
+      thisYearTotal: 0,
       unpaidCount: 0,
       unpaidTotal: 0,
       waitingPaymentCount: 0,
