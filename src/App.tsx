@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react"
 import type { Session } from "@supabase/supabase-js"
@@ -307,6 +308,41 @@ function getDraftPaymentStateText(draft: InvoiceDraft) {
   return "Rozpracováno"
 }
 
+type CustomerSuggestion = {
+  customerName: string
+  customerAddress: string
+  customerCompanyId: string
+  customerTaxId: string
+  contactName: string
+  contactEmail: string
+  contactPhone: string
+}
+
+function deriveUniqueCustomers(
+  invoices: InvoiceSummary[]
+): CustomerSuggestion[] {
+  const seen = new Set<string>()
+  const result: CustomerSuggestion[] = []
+
+  for (const inv of invoices) {
+    const key = `${inv.customer_name}|${inv.customer_company_id}`
+    if (!seen.has(key)) {
+      seen.add(key)
+      result.push({
+        customerName: inv.customer_name,
+        customerAddress: inv.customer_address,
+        customerCompanyId: inv.customer_company_id,
+        customerTaxId: inv.customer_tax_id,
+        contactName: inv.contact_name ?? "",
+        contactEmail: inv.contact_email ?? "",
+        contactPhone: inv.contact_phone ?? "",
+      })
+    }
+  }
+
+  return result
+}
+
 function App() {
   const [draft, setDraft] = useState<InvoiceDraft>(() => readStoredDraft())
   const [selectedCategory, setSelectedCategory] = useState("all")
@@ -331,6 +367,8 @@ function App() {
   const [view, setView] = useState<AppView>("dashboard")
   const [previewVisible, setPreviewVisible] = useState(false)
   const [showExportIssues, setShowExportIssues] = useState(false)
+  const [customerSuggestOpen, setCustomerSuggestOpen] = useState(false)
+  const customerSuggestRef = useRef<HTMLDivElement>(null)
 
   const total = useMemo(() => calculateTotal(draft.lines), [draft.lines])
   const invoiceValidationIssues = useMemo(
@@ -373,6 +411,19 @@ function App() {
       .map(({ item, selectedLine }) => ({ item, selectedLine }))
   }, [draft.lines, search, selectedCategory])
 
+  const uniqueCustomers = useMemo(
+    () => deriveUniqueCustomers(savedInvoices),
+    [savedInvoices]
+  )
+
+  const filteredCustomerSuggestions = useMemo(() => {
+    const query = draft.customerName.trim().toLocaleLowerCase("cs-CZ")
+    if (!query) return uniqueCustomers
+    return uniqueCustomers.filter((c) =>
+      c.customerName.toLocaleLowerCase("cs-CZ").includes(query)
+    )
+  }, [uniqueCustomers, draft.customerName])
+
   const showError = useCallback((title: string, error: unknown) => {
     setMessage({
       title,
@@ -381,6 +432,20 @@ function App() {
       variant: "destructive",
     })
   }, [])
+
+  function handleSelectCustomer(suggestion: CustomerSuggestion) {
+    setDraft((current) => ({
+      ...current,
+      customerName: suggestion.customerName,
+      customerAddress: suggestion.customerAddress,
+      customerCompanyId: suggestion.customerCompanyId,
+      customerTaxId: suggestion.customerTaxId,
+      contactName: suggestion.contactName,
+      contactEmail: suggestion.contactEmail,
+      contactPhone: suggestion.contactPhone,
+    }))
+    setCustomerSuggestOpen(false)
+  }
 
   const refreshSavedInvoices = useCallback(async () => {
     try {
@@ -407,6 +472,20 @@ function App() {
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(draft))
   }, [draft])
+
+  useEffect(() => {
+    if (!customerSuggestOpen) return
+    function handleClick(event: MouseEvent) {
+      if (
+        customerSuggestRef.current &&
+        !customerSuggestRef.current.contains(event.target as Node)
+      ) {
+        setCustomerSuggestOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClick)
+    return () => document.removeEventListener("mousedown", handleClick)
+  }, [customerSuggestOpen])
 
   useEffect(() => {
     if (!supabase) {
@@ -1354,13 +1433,48 @@ function App() {
               <FieldGroup className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
                 <Field>
                   <FieldLabel htmlFor="customer-name">Odběratel</FieldLabel>
-                  <Input
-                    id="customer-name"
-                    value={draft.customerName}
-                    onChange={(event) =>
-                      updateDraftField("customerName", event.target.value)
-                    }
-                  />
+                  <div className="relative" ref={customerSuggestRef}>
+                    <Input
+                      id="customer-name"
+                      value={draft.customerName}
+                      autoComplete="off"
+                      onChange={(event) => {
+                        updateDraftField("customerName", event.target.value)
+                        setCustomerSuggestOpen(true)
+                      }}
+                      onFocus={() => {
+                        if (uniqueCustomers.length > 0) {
+                          setCustomerSuggestOpen(true)
+                        }
+                      }}
+                    />
+                    {customerSuggestOpen &&
+                      filteredCustomerSuggestions.length > 0 && (
+                        <ul className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border bg-popover py-1 text-sm shadow-md">
+                          {filteredCustomerSuggestions.map((suggestion) => (
+                            <li key={suggestion.customerName}>
+                              <button
+                                type="button"
+                                className="w-full px-3 py-2 text-left hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus:outline-none"
+                                onMouseDown={(e) => {
+                                  e.preventDefault()
+                                  handleSelectCustomer(suggestion)
+                                }}
+                              >
+                                <span className="font-medium">
+                                  {suggestion.customerName}
+                                </span>
+                                {suggestion.customerCompanyId && (
+                                  <span className="ml-2 text-muted-foreground">
+                                    IČO {suggestion.customerCompanyId}
+                                  </span>
+                                )}
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                  </div>
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="customer-address">Adresa</FieldLabel>

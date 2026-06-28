@@ -23,6 +23,9 @@ export type InvoiceSummary = Pick<
   | "id"
   | "invoice_number"
   | "customer_name"
+  | "customer_address"
+  | "customer_company_id"
+  | "customer_tax_id"
   | "contact_name"
   | "contact_email"
   | "contact_phone"
@@ -78,7 +81,7 @@ export async function listInvoices() {
   const { data, error } = await supabase
     .from("invoices")
     .select(
-      "id, invoice_number, customer_name, contact_name, contact_email, contact_phone, issue_date, due_date, project_title, project_subtitle, status, paid_at, total_amount, exported_at, export_count, last_reminded_at, updated_at"
+      "id, invoice_number, customer_name, customer_address, customer_company_id, customer_tax_id, contact_name, contact_email, contact_phone, issue_date, due_date, project_title, project_subtitle, status, paid_at, total_amount, exported_at, export_count, last_reminded_at, updated_at"
     )
     .order("issue_date", { ascending: false })
     .order("updated_at", { ascending: false })
