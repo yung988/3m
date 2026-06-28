@@ -3629,14 +3629,17 @@ function InvoiceDocument({
         <div>
           <h2>Odběratel</h2>
           <strong>{draft.customerName}</strong>
+          {draft.contactName && <span>{draft.contactName}</span>}
           {customerAddress.map((line) => (
             <span key={line}>{line}</span>
           ))}
-          <p>
-            IČO: {draft.customerCompanyId}
-            <br />
-            DIČ: {draft.customerTaxId}
-          </p>
+          {(draft.customerCompanyId || draft.customerTaxId) && (
+            <p>
+              {draft.customerCompanyId && `IČO: ${draft.customerCompanyId}`}
+              {draft.customerCompanyId && draft.customerTaxId && <br />}
+              {draft.customerTaxId && `DIČ: ${draft.customerTaxId}`}
+            </p>
+          )}
         </div>
       </section>
 
