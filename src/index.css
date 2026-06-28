@@ -177,10 +177,16 @@
 }
 
 .invoice-sheet {
+  --invoice-page-width: 210mm;
+  --invoice-page-height: 297mm;
+  --invoice-padding-top: 14mm;
+  --invoice-padding-x: 15mm;
+  --invoice-padding-bottom: 0mm;
+
   box-sizing: border-box;
   display: flex;
-  min-height: 297mm;
-  width: 210mm;
+  min-height: var(--invoice-page-height);
+  width: var(--invoice-page-width);
   flex-direction: column;
   margin: 0 auto;
   overflow: hidden;
@@ -188,7 +194,8 @@
   color: #111111;
   box-shadow: 0 18px 55px oklch(0.28 0.018 95 / 18%);
   font-family: "Geist Variable", sans-serif;
-  padding: 14mm 15mm 18mm;
+  padding: var(--invoice-padding-top) var(--invoice-padding-x)
+    var(--invoice-padding-bottom);
   print-color-adjust: exact;
 }
 
@@ -215,9 +222,9 @@
   grid-template-columns: minmax(0, 1fr) 36mm;
   align-items: center;
   gap: 6mm;
-  margin: 8mm -15mm 6mm;
+  margin: 8mm calc(var(--invoice-padding-x) * -1) 6mm;
   background: linear-gradient(105deg, #d2d2d2 0 82%, transparent 82%);
-  padding: 7mm 15mm;
+  padding: 7mm var(--invoice-padding-x);
 }
 
 .invoice-payment-copy > span {
@@ -395,10 +402,10 @@
   grid-template-columns: 1fr 2fr;
   align-items: end;
   gap: 10mm;
-  margin: auto -15mm -18mm;
-  min-height: 19mm;
+  margin: auto calc(var(--invoice-padding-x) * -1) 0;
+  min-height: 22mm;
   background: linear-gradient(115deg, transparent 0 18%, #3b3c42 18% 100%);
-  padding: 5mm 15mm 4mm;
+  padding: 5mm var(--invoice-padding-x) 7mm;
   font-size: 3.8mm;
 }
 
@@ -413,14 +420,23 @@
 
 @page {
   size: A4;
-  margin: 8mm;
+  margin: 0;
 }
 
 @media print {
   html,
   body,
   #root {
+    width: 210mm;
+    height: 297mm;
+    min-height: 297mm;
+    margin: 0 !important;
+    overflow: hidden;
     background: #ffffff !important;
+  }
+
+  body {
+    print-color-adjust: exact;
   }
 
   .no-print {
@@ -442,6 +458,16 @@
     padding: 0;
   }
 
+  .invoice-preview-overlay {
+    position: absolute !important;
+    inset: 0 auto auto 0 !important;
+    display: block !important;
+    width: 210mm;
+    height: 297mm;
+    min-height: 297mm;
+    overflow: hidden !important;
+  }
+
   .invoice-preview-stage {
     flex: none;
     overflow: visible;
@@ -449,11 +475,18 @@
   }
 
   #invoice-print {
-    position: absolute;
-    inset: 0 auto auto 0;
-    min-height: 281mm;
-    width: 194mm;
+    position: relative;
+    inset: auto;
+    height: var(--invoice-page-height);
+    min-height: var(--invoice-page-height);
+    width: var(--invoice-page-width);
     margin: 0;
     box-shadow: none;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  .invoice-footer {
+    margin-bottom: 2mm;
   }
 }

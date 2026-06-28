@@ -3465,7 +3465,7 @@ function InvoicePreviewOverlay({
   total: number
 }) {
   return (
-    <section className="fixed inset-0 z-50 flex flex-col bg-background text-foreground">
+    <section className="invoice-preview-overlay fixed inset-0 z-50 flex flex-col bg-background text-foreground">
       <div className="no-print flex flex-col gap-3 border-b bg-background px-4 py-3 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
