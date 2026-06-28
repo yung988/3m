@@ -226,6 +226,21 @@ export async function importBankTransactions(
   return data satisfies BankTransactionSummary[]
 }
 
+export async function linkBankTransactionToInvoice(
+  transactionId: string,
+  invoiceId: string | null
+) {
+  const supabase = getSupabaseClient()
+  const { error } = await supabase
+    .from("bank_transactions")
+    .update({ invoice_id: invoiceId })
+    .eq("id", transactionId)
+
+  if (error) {
+    throw error
+  }
+}
+
 export async function markInvoiceExported(id: string) {
   const supabase = getSupabaseClient()
   const { data, error } = await supabase

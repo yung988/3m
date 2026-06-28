@@ -128,6 +128,7 @@ import {
   deleteInvoice,
   getNextInvoiceNumber,
   importBankTransactions,
+  linkBankTransactionToInvoice,
   listBankTransactions,
   listInvoices,
   loadInvoice,
@@ -842,6 +843,18 @@ function App() {
     }
   }
 
+  async function handleLinkTransaction(
+    transactionId: string,
+    invoiceId: string | null
+  ) {
+    try {
+      await linkBankTransactionToInvoice(transactionId, invoiceId)
+      await refreshBankTransactions()
+    } catch (error) {
+      showError("Přiřazení faktury k platbě selhalo", error)
+    }
+  }
+
   async function handleMarkCurrentSent() {
     if (invoiceValidationIssues.length > 0) {
       setPreviewVisible(false)
@@ -1153,6 +1166,7 @@ function App() {
             onCancelImport={() => setBankImportPreview(null)}
             onConfirmImport={handleConfirmBankImport}
             onImportXml={handlePreviewBankXml}
+            onLinkTransaction={handleLinkTransaction}
             onLoadInvoice={handleLoadInvoice}
             onMarkPaid={(invoiceId) => handleTogglePaid(invoiceId, true)}
           />
@@ -2163,6 +2177,29 @@ function InvoiceFollowUpCard({
   )
 }
 
+type BankInboxCategory = "ready" | "mismatch" | "unknown" | "no_match" | "resolved"
+
+function categorizeBankTransaction(
+  transaction: BankTransactionSummary,
+  invoice: InvoiceSummary | null,
+  amountMatches: boolean
+): BankInboxCategory {
+  if (Number(transaction.amount) <= 0) return "resolved"
+  if (invoice?.status === "paid" && amountMatches) return "resolved"
+  if (invoice && amountMatches) return "ready"
+  if (invoice && !amountMatches) return "mismatch"
+  if (transaction.variable_symbol) return "unknown"
+  return "no_match"
+}
+
+const BANK_INBOX_CATEGORY_ORDER: BankInboxCategory[] = [
+  "ready",
+  "mismatch",
+  "unknown",
+  "no_match",
+  "resolved",
+]
+
 function BankTransactionsCard({
   importPreview,
   imports,
@@ -2173,6 +2210,7 @@ function BankTransactionsCard({
   onCancelImport,
   onConfirmImport,
   onImportXml,
+  onLinkTransaction,
   onLoadInvoice,
   onMarkPaid,
 }: {
@@ -2185,19 +2223,53 @@ function BankTransactionsCard({
   onCancelImport: () => void
   onConfirmImport: () => void
   onImportXml: (event: ChangeEvent<HTMLInputElement>) => void
+  onLinkTransaction: (transactionId: string, invoiceId: string | null) => void
   onLoadInvoice: (invoiceId: string) => void
   onMarkPaid: (invoiceId: string) => void
 }) {
-  const visibleImports = imports.slice(0, 12)
+  const [showResolved, setShowResolved] = useState(false)
+
+  const categorizedImports = imports
+    .map((transaction) => {
+      const match = findInvoiceMatchForSavedTransaction(transaction, invoices)
+      const invoice = match?.invoice ?? null
+      const amountMatches = invoice
+        ? isBankAmountMatchingInvoice(transaction.amount, invoice)
+        : false
+      const category = categorizeBankTransaction(
+        transaction,
+        invoice,
+        amountMatches
+      )
+      return { transaction, invoice, amountMatches, category }
+    })
+    .sort(
+      (a, b) =>
+        BANK_INBOX_CATEGORY_ORDER.indexOf(a.category) -
+        BANK_INBOX_CATEGORY_ORDER.indexOf(b.category)
+    )
+
+  const actionableItems = categorizedImports.filter(
+    (item) => item.category !== "resolved"
+  )
+  const resolvedItems = categorizedImports.filter(
+    (item) => item.category === "resolved"
+  )
+  const visibleImports = showResolved
+    ? categorizedImports
+    : actionableItems.length > 0
+      ? actionableItems
+      : categorizedImports.slice(0, 12)
+
+  const unpaidInvoices = invoices.filter((inv) => inv.status !== "paid")
+
   const visiblePreviewItems = importPreview?.items.slice(0, 8) ?? []
   const hiddenPreviewCount =
     importPreview === null
       ? 0
       : Math.max(importPreview.items.length - visiblePreviewItems.length, 0)
   const previewStats = createBankImportPreviewStats(importPreview?.items ?? [])
-  const matchedCount = imports.filter((transaction) =>
-    findInvoiceMatchForSavedTransaction(transaction, invoices)
-  ).length
+  const matchedCount = categorizedImports.filter((item) => item.invoice).length
 
   return (
     <Card>
@@ -2211,8 +2283,8 @@ function BankTransactionsCard({
           symbolu.
         </CardDescription>
         <CardAction>
-          <Badge variant={matchedCount ? "secondary" : "outline"}>
-            {matchedCount}/{imports.length}
+          <Badge variant={actionableItems.length ? "destructive" : "outline"}>
+            {actionableItems.length} čeká
           </Badge>
         </CardAction>
       </CardHeader>
@@ -2394,105 +2466,206 @@ function BankTransactionsCard({
           <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
             Načítám faktury a bankovní pohyby…
           </div>
-        ) : visibleImports.length === 0 ? (
+        ) : imports.length === 0 ? (
           <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
             Nahraj XML výpis z internetového bankovnictví Air Bank. Aplikace
             uloží pohyby a zkusí je spárovat podle variabilního symbolu.
           </div>
         ) : (
-          <ul className="flex flex-col gap-2">
-            {visibleImports.map((transaction) => {
-              const match = findInvoiceMatchForSavedTransaction(
-                transaction,
-                invoices
-              )
-              const invoice = match?.invoice ?? null
-              const amountMatches = invoice
-                ? isBankAmountMatchingInvoice(transaction.amount, invoice)
-                : false
-              const canMarkPaid =
-                invoice &&
-                amountMatches &&
-                Number(transaction.amount) > 0 &&
-                invoice.status !== "paid"
+          <>
+            <ul className="flex flex-col gap-2">
+              {visibleImports.map(
+                ({ transaction, invoice, category }) => {
+                  const canMarkPaid =
+                    category === "ready" && invoice !== null
+                  const needsLink =
+                    category === "unknown" || category === "no_match"
+                  const isMismatch = category === "mismatch"
+                  const isResolved = category === "resolved"
 
-              return (
-                <li
-                  key={transaction.id}
-                  className="rounded-lg border bg-card p-3"
-                >
-                  <div className="flex flex-col gap-3 md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge
-                          variant={getBankMatchBadgeVariant(
-                            transaction,
-                            invoice
-                          )}
-                        >
-                          {getBankMatchLabel(
-                            transaction,
-                            invoice,
-                            amountMatches
-                          )}
-                        </Badge>
-                        <span className="font-medium tabular-nums">
-                          {formatCurrency(Number(transaction.amount) || 0)}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          {formatDate(transaction.booked_at)}
-                        </span>
+                  return (
+                    <li
+                      key={transaction.id}
+                      className={cn(
+                        "rounded-lg border bg-card p-3",
+                        isResolved && "opacity-50"
+                      )}
+                    >
+                      <div className="flex flex-col gap-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge
+                            variant={getBankInboxBadgeVariant(category)}
+                          >
+                            {getBankInboxLabel(category)}
+                          </Badge>
+                          <span className="font-medium tabular-nums">
+                            {formatCurrency(Number(transaction.amount) || 0)}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {formatDate(transaction.booked_at)}
+                          </span>
+                        </div>
+
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">
+                            {invoice
+                              ? `${invoice.invoice_number} · ${
+                                  invoice.project_title ||
+                                  invoice.customer_name
+                                }`
+                              : transaction.counterparty_name ||
+                                transaction.message ||
+                                "Bankovní pohyb"}
+                          </p>
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            {transaction.variable_symbol
+                              ? `VS ${transaction.variable_symbol}`
+                              : "Bez variabilního symbolu"}
+                            {transaction.counterparty_name && !invoice
+                              ? ` · ${transaction.counterparty_name}`
+                              : ""}
+                          </p>
+                          {isMismatch && invoice ? (
+                            <p className="mt-1 text-xs font-medium text-destructive">
+                              Faktura{" "}
+                              {formatCurrency(
+                                Number(invoice.total_amount) || 0
+                              )}{" "}
+                              · platba{" "}
+                              {formatCurrency(
+                                Number(transaction.amount) || 0
+                              )}{" "}
+                              — rozdíl{" "}
+                              {formatCurrency(
+                                Math.abs(
+                                  Number(invoice.total_amount) -
+                                    Number(transaction.amount)
+                                )
+                              )}
+                            </p>
+                          ) : null}
+                        </div>
+
+                        {needsLink ? (
+                          <div className="flex items-center gap-2">
+                            <Select
+                              value={transaction.invoice_id ?? ""}
+                              onValueChange={(val) =>
+                                onLinkTransaction(
+                                  transaction.id,
+                                  val || null
+                                )
+                              }
+                            >
+                              <SelectTrigger className="h-8 flex-1 text-xs">
+                                <SelectValue placeholder="Přiřadit fakturu ručně…" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {unpaidInvoices.map((inv) => (
+                                  <SelectItem key={inv.id} value={inv.id}>
+                                    {inv.invoice_number} ·{" "}
+                                    {inv.project_title || inv.customer_name} ·{" "}
+                                    {formatCurrency(
+                                      Number(inv.total_amount) || 0
+                                    )}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        ) : null}
+
+                        <div className="flex flex-wrap gap-2">
+                          {invoice ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={isSyncing}
+                              onClick={() => onLoadInvoice(invoice.id)}
+                            >
+                              <PencilIcon data-icon="inline-start" />
+                              Otevřít
+                            </Button>
+                          ) : null}
+                          {canMarkPaid ? (
+                            <Button
+                              size="sm"
+                              disabled={isSyncing}
+                              onClick={() => onMarkPaid(invoice!.id)}
+                            >
+                              <CheckCircle2Icon data-icon="inline-start" />
+                              Označit zaplaceno
+                            </Button>
+                          ) : null}
+                          {isMismatch && invoice ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={isSyncing}
+                              onClick={() => onMarkPaid(invoice.id)}
+                            >
+                              <CheckCircle2Icon data-icon="inline-start" />
+                              Označit zaplaceno přesto
+                            </Button>
+                          ) : null}
+                        </div>
                       </div>
-                      <p className="mt-1 truncate text-sm font-medium">
-                        {invoice
-                          ? `${invoice.invoice_number} · ${
-                              invoice.project_title || invoice.customer_name
-                            }`
-                          : transaction.counterparty_name ||
-                            transaction.message ||
-                            "Bankovní pohyb"}
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {transaction.variable_symbol
-                          ? `VS ${transaction.variable_symbol}`
-                          : "Bez variabilního symbolu"}
-                        {transaction.counterparty_name
-                          ? ` · ${transaction.counterparty_name}`
-                          : ""}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2 md:justify-end">
-                      {invoice ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={isSyncing}
-                          onClick={() => onLoadInvoice(invoice.id)}
-                        >
-                          <PencilIcon data-icon="inline-start" />
-                          Otevřít
-                        </Button>
-                      ) : null}
-                      {canMarkPaid ? (
-                        <Button
-                          size="sm"
-                          disabled={isSyncing}
-                          onClick={() => onMarkPaid(invoice.id)}
-                        >
-                          <CheckCircle2Icon data-icon="inline-start" />
-                          Zaplaceno
-                        </Button>
-                      ) : null}
-                    </div>
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
+                    </li>
+                  )
+                }
+              )}
+            </ul>
+
+            {resolvedItems.length > 0 ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="w-full text-xs text-muted-foreground"
+                onClick={() => setShowResolved((v) => !v)}
+              >
+                {showResolved
+                  ? "Skrýt vyřešené"
+                  : `Zobrazit vyřešené (${resolvedItems.length})`}
+              </Button>
+            ) : null}
+          </>
         )}
       </CardContent>
     </Card>
   )
+}
+
+function getBankInboxLabel(category: BankInboxCategory): string {
+  switch (category) {
+    case "ready":
+      return "připraveno"
+    case "mismatch":
+      return "částka nesedí"
+    case "unknown":
+      return "neznámý VS"
+    case "no_match":
+      return "bez VS"
+    case "resolved":
+      return "vyřešeno"
+  }
+}
+
+function getBankInboxBadgeVariant(
+  category: BankInboxCategory
+): "default" | "secondary" | "outline" | "destructive" {
+  switch (category) {
+    case "ready":
+      return "default"
+    case "mismatch":
+      return "destructive"
+    case "unknown":
+      return "outline"
+    case "no_match":
+      return "secondary"
+    case "resolved":
+      return "secondary"
+  }
 }
 
 function StatTile({
@@ -2728,42 +2901,6 @@ function isBankAmountMatchingInvoice(
   return Math.abs(Number(amount) - Number(invoice.total_amount)) < 0.01
 }
 
-function getBankMatchLabel(
-  transaction: BankTransactionSummary,
-  invoice: InvoiceSummary | null,
-  amountMatches: boolean
-) {
-  if (invoice?.status === "paid" && amountMatches) {
-    return "zaplaceno"
-  }
-
-  if (invoice && amountMatches) {
-    return "nalezená platba"
-  }
-
-  if (invoice) {
-    return "částka nesedí"
-  }
-
-  if (transaction.variable_symbol) {
-    return "neznámý VS"
-  }
-
-  return "bez VS"
-}
-
-function getBankMatchBadgeVariant(
-  transaction: BankTransactionSummary,
-  invoice: InvoiceSummary | null
-): "default" | "secondary" | "outline" | "destructive" {
-  if (!invoice) {
-    return transaction.variable_symbol ? "outline" : "secondary"
-  }
-
-  return isBankAmountMatchingInvoice(transaction.amount, invoice)
-    ? "default"
-    : "destructive"
-}
 
 function getBankPreviewLabel(item: BankImportPreviewItem) {
   if (item.invoice?.status === "paid" && item.amountMatches) {
