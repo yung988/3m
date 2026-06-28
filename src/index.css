@@ -207,14 +207,20 @@
   font-size: 9mm;
   font-weight: 600;
   line-height: 1;
+  padding-bottom: 3.5mm;
+  border-bottom: 0.6mm solid #84bd2b;
 }
 
 .invoice-top span {
-  color: #c8c8c8;
+  color: #b0b0b0;
+  font-weight: 400;
+  font-size: 7mm;
+  letter-spacing: 0.04em;
 }
 
 .invoice-top strong {
-  color: #000000;
+  color: #111111;
+  font-weight: 700;
 }
 
 .invoice-payment {
@@ -222,8 +228,8 @@
   grid-template-columns: minmax(0, 1fr) 36mm;
   align-items: center;
   gap: 6mm;
-  margin: 8mm calc(var(--invoice-padding-x) * -1) 6mm;
-  background: linear-gradient(105deg, #d2d2d2 0 82%, transparent 82%);
+  margin: 6mm calc(var(--invoice-padding-x) * -1) 5mm;
+  background: linear-gradient(105deg, #d8d8d8 0 80%, transparent 80%);
   padding: 7mm var(--invoice-padding-x);
 }
 
@@ -334,8 +340,10 @@
 }
 
 .invoice-legal {
-  margin: 5mm 0;
-  font-size: 3.1mm;
+  margin: 4mm 0 5mm;
+  font-size: 2.9mm;
+  color: #888888;
+  line-height: 1.4;
 }
 
 .invoice-items h2 {
@@ -405,17 +413,20 @@
   margin: auto calc(var(--invoice-padding-x) * -1) 0;
   min-height: 22mm;
   background: linear-gradient(115deg, transparent 0 18%, #3b3c42 18% 100%);
+  border-top: 0.5mm solid #84bd2b;
   padding: 5mm var(--invoice-padding-x) 7mm;
-  font-size: 3.8mm;
+  font-size: 3.6mm;
 }
 
 .invoice-footer span {
-  color: #000000;
+  color: #444444;
+  font-size: 3.2mm;
 }
 
 .invoice-footer strong {
   color: #ffffff;
-  line-height: 1.25;
+  line-height: 1.4;
+  font-weight: 500;
 }
 
 @page {
