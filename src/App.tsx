@@ -1087,6 +1087,21 @@ function App() {
         <span className="hidden sm:inline">Export / PDF</span>
         <span className="sm:hidden">PDF</span>
       </Button>
+      {buildReminderMailtoHrefForDraft(draft) ? (
+        <Button variant="outline" asChild>
+          <a href={buildReminderMailtoHrefForDraft(draft)!}>
+            <MailIcon data-icon="inline-start" />
+            <span className="hidden sm:inline">E-mail</span>
+            <span className="sm:hidden">Mail</span>
+          </a>
+        </Button>
+      ) : (
+        <Button variant="outline" disabled>
+          <MailIcon data-icon="inline-start" />
+          <span className="hidden sm:inline">E-mail</span>
+          <span className="sm:hidden">Mail</span>
+        </Button>
+      )}
       <Tooltip>
         <TooltipTrigger asChild>
           <Button variant="outline" size="icon" onClick={resetDraft}>
@@ -3406,6 +3421,14 @@ function SavedInvoicesCard({
                             <CopyIcon className="size-4" />
                             Duplikovat
                           </ContextMenuItem>
+                          {invoice.contact_email ? (
+                            <ContextMenuItem asChild>
+                              <a href={buildReminderMailtoHref(invoice) ?? undefined}>
+                                <MailIcon className="size-4" />
+                                Otevřít v e-mailu
+                              </a>
+                            </ContextMenuItem>
+                          ) : null}
                           <ContextMenuSeparator />
                           {isWaitingForSend ? (
                             <ContextMenuItem
@@ -3483,6 +3506,19 @@ function InvoicePreviewOverlay({
             <PrinterIcon data-icon="inline-start" />
             {isExporting ? "Exportuji" : "Export / PDF"}
           </Button>
+          {buildReminderMailtoHrefForDraft(draft) ? (
+            <Button variant="outline" asChild>
+              <a href={buildReminderMailtoHrefForDraft(draft)!}>
+                <MailIcon data-icon="inline-start" />
+                E-mail
+              </a>
+            </Button>
+          ) : (
+            <Button variant="outline" disabled>
+              <MailIcon data-icon="inline-start" />
+              E-mail
+            </Button>
+          )}
         </div>
       </div>
       <div className="invoice-stage invoice-preview-stage">
@@ -3912,6 +3948,32 @@ function buildReminderMailtoHref(invoice: InvoiceSummary) {
   const body = encodeURIComponent(buildPaymentReminderText(invoice))
 
   return `mailto:${email}?subject=${subject}&body=${body}`
+}
+
+function buildReminderMailtoHrefForDraft(draft: InvoiceDraft): string | null {
+  if (!draft.contactEmail || !draft.id) {
+    return null
+  }
+
+  return buildReminderMailtoHref({
+    id: draft.id,
+    invoice_number: draft.invoiceNumber,
+    customer_name: draft.customerName,
+    contact_name: draft.contactName,
+    contact_email: draft.contactEmail,
+    contact_phone: draft.contactPhone,
+    issue_date: draft.issueDate,
+    due_date: draft.dueDate,
+    project_title: draft.projectTitle,
+    project_subtitle: draft.projectSubtitle,
+    status: draft.status,
+    paid_at: draft.paidAt,
+    total_amount: calculateTotal(draft.lines),
+    exported_at: draft.exportedAt,
+    export_count: draft.exportCount,
+    last_reminded_at: draft.lastRemindedAt,
+    updated_at: "",
+  })
 }
 
 function buildReminderSmsHref(invoice: InvoiceSummary) {
