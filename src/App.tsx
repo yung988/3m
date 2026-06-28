@@ -603,10 +603,7 @@ function App() {
         throw error
       }
 
-      setMessage({
-        title: "Přihlášeno",
-        description: "Faktury se teď můžou ukládat do Supabase.",
-      })
+      setMessage(null)
     } catch (error) {
       showError("Přihlášení selhalo", error)
     } finally {
