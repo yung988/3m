@@ -2,6 +2,7 @@ import type { User } from "@supabase/supabase-js"
 
 import type { Database } from "@/lib/database.types"
 import {
+  assertInvoiceDraftInvariant,
   calculateTotal,
   type InvoiceDraft,
   type InvoiceLine,
@@ -124,6 +125,8 @@ export async function loadInvoice(id: string) {
 }
 
 export async function saveInvoice(draft: InvoiceDraft, user: User) {
+  assertInvoiceDraftInvariant(draft, "invoice save")
+
   const supabase = getSupabaseClient()
   const invoicePayload = toInvoicePayload(draft, user)
   const invoiceResult = draft.id
@@ -316,6 +319,8 @@ export async function setInvoicePaid(id: string, isPaid: boolean) {
 }
 
 function toInvoicePayload(draft: InvoiceDraft, user: User): InvoiceInsert {
+  assertInvoiceDraftInvariant(draft, "invoice payload")
+
   return {
     owner_id: user.id,
     invoice_number: draft.invoiceNumber,
@@ -353,7 +358,7 @@ function fromInvoiceRow(row: InvoiceWithLines): InvoiceDraft {
       }
     })
 
-  return {
+  const draft: InvoiceDraft = {
     id: row.id,
     invoiceNumber: row.invoice_number,
     issueDate: row.issue_date,
@@ -374,6 +379,10 @@ function fromInvoiceRow(row: InvoiceWithLines): InvoiceDraft {
     lastRemindedAt: row.last_reminded_at,
     lines,
   }
+
+  assertInvoiceDraftInvariant(draft, "loaded invoice")
+
+  return draft
 }
 
 export async function getNextInvoiceNumber(): Promise<string> {

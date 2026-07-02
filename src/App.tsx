@@ -71,6 +71,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from "@/components/ui/drawer"
 import { Field, FieldGroup, FieldLabel, FieldSet } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import {
@@ -103,6 +111,7 @@ import {
 } from "@/lib/airbank-xml"
 import { cn } from "@/lib/utils"
 import {
+  assertInvoiceDraftInvariant,
   buildPaymentQrString,
   calculateTotal,
   buildInvoicePdfFileName,
@@ -331,6 +340,7 @@ function App() {
   const [view, setView] = useState<AppView>("dashboard")
   const [previewVisible, setPreviewVisible] = useState(false)
   const [showExportIssues, setShowExportIssues] = useState(false)
+  const [mobileBasicsOpen, setMobileBasicsOpen] = useState(false)
 
   const total = useMemo(() => calculateTotal(draft.lines), [draft.lines])
   const invoiceValidationIssues = useMemo(
@@ -1157,7 +1167,7 @@ function App() {
   if (view === "dashboard") {
     return (
       <AppShell actions={dashboardActions} userEmail={user.email}>
-        <main className="mx-auto flex max-w-[1400px] flex-col gap-4 p-4">
+        <main className="mx-auto flex max-w-[1500px] flex-col gap-4 p-4 md:gap-5 md:p-6">
           {message ? <MessageAlert message={message} /> : null}
           <InvoiceStatsCard invoices={savedInvoices} />
           <InvoiceFollowUpCard
@@ -1199,24 +1209,32 @@ function App() {
 
   return (
     <AppShell actions={editorActions} userEmail={user.email}>
-      <main className="mx-auto grid max-w-[1400px] grid-cols-1 gap-4 px-4 pt-4 pb-28 lg:grid-cols-[minmax(300px,360px)_minmax(0,1fr)] lg:pb-4">
+      <main className="mx-auto flex max-w-[1500px] flex-col gap-4 px-4 pt-4 pb-32 lg:pb-6">
         {/* Invoice form — DOM first so mobile shows it before the price list */}
-        <Card className="no-print h-fit lg:order-2">
+        <Card className="app-panel no-print h-fit overflow-visible">
           <CardHeader>
-            <CardTitle>Rozpis faktury</CardTitle>
+            <CardTitle>Základ faktury</CardTitle>
             <CardDescription>
-              Čísla a texty se ukládají do Supabase po kliknutí na Uložit.
+              Údaje dokladu, odběratele, termínů, platby a exportu.
             </CardDescription>
             <CardAction>
               <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="md:hidden"
+                  onClick={() => setMobileBasicsOpen((open) => !open)}
+                >
+                  {mobileBasicsOpen ? "Skrýt údaje" : "Upravit údaje"}
+                </Button>
                 <a
                   href="#cenik-sekce"
                   className="inline-flex h-8 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium hover:bg-muted lg:hidden"
                 >
-                  <ShoppingCartIcon className="size-4" />
+                  <ShoppingCartIcon data-icon="inline-start" />
                   Ceník
                 </a>
                 <Button
+                  className="hidden lg:inline-flex"
                   variant="outline"
                   onClick={() => addLine(createEmptyLine())}
                 >
@@ -1250,7 +1268,29 @@ function App() {
               </Alert>
             ) : null}
 
-            <FieldSet>
+            <div className="rounded-xl border bg-background/45 p-3 md:hidden">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">
+                    {draft.customerName || "Bez odběratele"}
+                  </p>
+                  <p className="mt-1 truncate text-xs text-muted-foreground">
+                    {draft.invoiceNumber} ·{" "}
+                    {draft.projectSubtitle || "bez místa"}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="text-sm font-semibold tabular-nums">
+                    {formatCurrency(total)}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    splatnost {formatDate(draft.dueDate)}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <FieldSet className={cn(!mobileBasicsOpen && "hidden md:flex")}>
               <FieldGroup className="grid grid-cols-2 gap-4 md:grid-cols-4">
                 <Field>
                   <FieldLabel htmlFor="invoice-number">
@@ -1337,7 +1377,12 @@ function App() {
               </FieldGroup>
             </FieldSet>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div
+              className={cn(
+                "grid grid-cols-2 gap-3",
+                !mobileBasicsOpen && "hidden md:grid"
+              )}
+            >
               <div className="rounded-lg border bg-card p-3">
                 <div className="flex items-center gap-2 text-sm font-medium">
                   <BanknoteIcon data-icon="inline-start" />
@@ -1360,9 +1405,9 @@ function App() {
               </div>
             </div>
 
-            <Separator />
+            <Separator className={cn(!mobileBasicsOpen && "hidden md:block")} />
 
-            <FieldSet>
+            <FieldSet className={cn(!mobileBasicsOpen && "hidden md:flex")}>
               <FieldGroup className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
                 <Field>
                   <FieldLabel htmlFor="customer-name">Odběratel</FieldLabel>
@@ -1450,360 +1495,154 @@ function App() {
                 </Field>
               </FieldGroup>
             </FieldSet>
-
-            <Separator />
-
-            <div className="flex flex-col gap-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-base font-medium">Položky</h2>
-                <Badge variant="secondary">{draft.lines.length} položek</Badge>
-              </div>
-
-              {draft.lines.length === 0 ? (
-                <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-                  Přidej položku z ceníku nebo vlastní řádek.
-                </div>
-              ) : null}
-
-              {/* Mobile: card per line item */}
-              {draft.lines.length > 0 ? (
-                <div className="flex flex-col gap-3 md:hidden">
-                  {draft.lines.map((line) => (
-                    <div
-                      key={line.id}
-                      className="flex flex-col gap-3 rounded-lg border p-3"
-                    >
-                      <div className="flex items-start gap-2">
-                        <Textarea
-                          value={line.description}
-                          className="min-h-14 flex-1 resize-y text-sm"
-                          onChange={(event) =>
-                            updateLine(line.id, {
-                              description: event.target.value,
-                            })
-                          }
-                        />
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="shrink-0"
-                          aria-label="Odebrat položku"
-                          onClick={() => removeLine(line.id)}
-                        >
-                          <Trash2Icon className="size-4" />
-                        </Button>
-                      </div>
-                      <div className="grid grid-cols-3 gap-2">
-                        <Field>
-                          <FieldLabel>
-                            {line.unitLabel === "hod" ? "h:mm" : "Množství"}
-                          </FieldLabel>
-                          {line.unitLabel === "hod" ? (
-                            <HoursInput
-                              value={line.quantity}
-                              className="text-right"
-                              onChange={(v) =>
-                                updateLine(line.id, { quantity: v })
-                              }
-                            />
-                          ) : (
-                            <Input
-                              inputMode="decimal"
-                              value={line.quantity}
-                              className="text-right"
-                              onChange={(event) =>
-                                updateLine(line.id, {
-                                  quantity: normalizeMoneyInput(
-                                    event.target.value
-                                  ),
-                                })
-                              }
-                            />
-                          )}
-                        </Field>
-                        <Field>
-                          <FieldLabel>Jedn.</FieldLabel>
-                          <Input
-                            value={line.unitLabel}
-                            placeholder="ks"
-                            onChange={(event) =>
-                              updateLine(line.id, {
-                                unitLabel: event.target.value,
-                              })
-                            }
-                          />
-                        </Field>
-                        <Field>
-                          <FieldLabel>Cena / j.</FieldLabel>
-                          <Input
-                            inputMode="decimal"
-                            value={line.unitPrice}
-                            className="text-right"
-                            onChange={(event) =>
-                              updateLine(line.id, {
-                                unitPrice: normalizeMoneyInput(
-                                  event.target.value
-                                ),
-                              })
-                            }
-                          />
-                        </Field>
-                      </div>
-                      <p className="text-right text-sm font-medium">
-                        Celkem: {formatCurrency(line.quantity * line.unitPrice)}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-
-              {/* Desktop: table */}
-              {draft.lines.length > 0 ? (
-                <div className="hidden md:block">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="min-w-80">Popis</TableHead>
-                        <TableHead className="w-24 text-right">
-                          Množství
-                        </TableHead>
-                        <TableHead className="w-20">Jedn.</TableHead>
-                        <TableHead className="w-32 text-right">Cena</TableHead>
-                        <TableHead className="w-32 text-right">
-                          Celkem
-                        </TableHead>
-                        <TableHead className="w-12" />
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {draft.lines.map((line) => (
-                        <TableRow key={line.id}>
-                          <TableCell className="min-w-80 whitespace-normal">
-                            <Textarea
-                              value={line.description}
-                              className="min-h-16 resize-y"
-                              onChange={(event) =>
-                                updateLine(line.id, {
-                                  description: event.target.value,
-                                })
-                              }
-                            />
-                          </TableCell>
-                          <TableCell>
-                            {line.unitLabel === "hod" ? (
-                              <HoursInput
-                                value={line.quantity}
-                                className="text-right"
-                                onChange={(v) =>
-                                  updateLine(line.id, { quantity: v })
-                                }
-                              />
-                            ) : (
-                              <Input
-                                inputMode="decimal"
-                                value={line.quantity}
-                                className="text-right"
-                                onChange={(event) =>
-                                  updateLine(line.id, {
-                                    quantity: normalizeMoneyInput(
-                                      event.target.value
-                                    ),
-                                  })
-                                }
-                              />
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              value={line.unitLabel}
-                              placeholder="ks"
-                              onChange={(event) =>
-                                updateLine(line.id, {
-                                  unitLabel: event.target.value,
-                                })
-                              }
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              inputMode="decimal"
-                              value={line.unitPrice}
-                              className="text-right"
-                              onChange={(event) =>
-                                updateLine(line.id, {
-                                  unitPrice: normalizeMoneyInput(
-                                    event.target.value
-                                  ),
-                                })
-                              }
-                            />
-                          </TableCell>
-                          <TableCell className="text-right font-medium">
-                            {formatCurrency(line.quantity * line.unitPrice)}
-                          </TableCell>
-                          <TableCell>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  aria-label="Odebrat položku"
-                                  onClick={() => removeLine(line.id)}
-                                >
-                                  <Trash2Icon data-icon="inline-start" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Odebrat</TooltipContent>
-                            </Tooltip>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              ) : null}
-            </div>
-
-            <div className="flex flex-col gap-1 rounded-lg bg-secondary p-4 text-right">
-              <span className="text-sm text-muted-foreground">K úhradě</span>
-              <strong className="text-3xl font-semibold">
-                {formatCurrency(total)}
-              </strong>
-            </div>
           </CardContent>
         </Card>
 
         {/* Price list — DOM second so mobile shows it after the form */}
-        <div
-          id="cenik-sekce"
-          className="no-print flex h-fit scroll-mt-20 flex-col gap-4 lg:sticky lg:top-24 lg:order-1"
-        >
-          <Card>
-            <CardHeader>
-              <CardTitle>Ceník úkonů</CardTitle>
-              <CardDescription>
-                Položka se přidá na fakturu jedním kliknutím.
-              </CardDescription>
-              <CardAction>
-                <a
-                  href="#invoice-number"
-                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium hover:bg-muted lg:hidden"
-                >
-                  ↑ Zpět
-                </a>
-              </CardAction>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-4">
-              <FieldGroup>
-                <Field>
-                  <FieldLabel htmlFor="price-search">Hledat</FieldLabel>
-                  <Input
-                    id="price-search"
-                    value={search}
-                    placeholder="např. SSR, doprava, EMR"
-                    onChange={(event) => setSearch(event.target.value)}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel>Kategorie</FieldLabel>
-                  <Select
-                    value={selectedCategory}
-                    onValueChange={setSelectedCategory}
+        <div className="no-print grid items-start gap-4 lg:grid-cols-[minmax(320px,430px)_minmax(0,1fr)]">
+          <div
+            id="cenik-sekce"
+            className="flex h-fit scroll-mt-20 flex-col gap-4 lg:sticky lg:top-24"
+          >
+            <Card className="app-panel">
+              <CardHeader>
+                <CardTitle>Ceník úkonů</CardTitle>
+                <CardDescription>
+                  Položka se přidá na fakturu jedním kliknutím.
+                </CardDescription>
+                <CardAction>
+                  <a
+                    href="#invoice-number"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium hover:bg-muted lg:hidden"
                   >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Vybrat kategorii" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        <SelectItem value="all">Všechny položky</SelectItem>
-                        {priceCategories.map((category) => (
-                          <SelectItem key={category} value={category}>
-                            {category}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                </Field>
-              </FieldGroup>
+                    ↑ Zpět
+                  </a>
+                </CardAction>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-4">
+                <FieldGroup>
+                  <Field>
+                    <FieldLabel htmlFor="price-search">Hledat</FieldLabel>
+                    <Input
+                      id="price-search"
+                      value={search}
+                      placeholder="např. SSR, doprava, EMR"
+                      onChange={(event) => setSearch(event.target.value)}
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel>Kategorie</FieldLabel>
+                    <Select
+                      value={selectedCategory}
+                      onValueChange={setSelectedCategory}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Vybrat kategorii" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value="all">Všechny položky</SelectItem>
+                          {priceCategories.map((category) => (
+                            <SelectItem key={category} value={category}>
+                              {category}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                </FieldGroup>
 
-              <div className="pr-1 lg:max-h-[62svh] lg:overflow-y-auto">
-                {filteredItems.length > 0 ? (
-                  <ul className="flex flex-col">
-                    {filteredItems.map(({ item, selectedLine }) => {
-                      const isSelected = Boolean(selectedLine)
+                <div className="pr-1 lg:max-h-[66svh] lg:overflow-y-auto">
+                  {filteredItems.length > 0 ? (
+                    <ul className="flex flex-col gap-2">
+                      {filteredItems.map(({ item, selectedLine }) => {
+                        const isSelected = Boolean(selectedLine)
 
-                      return (
-                        <li
-                          key={item.id}
-                          className={cn(
-                            "grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b px-2 py-3 last:border-b-0",
-                            isSelected && "bg-muted/45"
-                          )}
-                        >
-                          <div className="min-w-0">
-                            <p className="text-sm leading-snug font-medium">
-                              {item.name}
-                            </p>
-                            <div className="mt-2 flex flex-wrap items-center gap-2">
-                              <Badge variant="outline">{item.sourceUnit}</Badge>
-                              <span className="text-sm text-muted-foreground">
-                                {formatCurrency(item.price)}
-                              </span>
-                              {selectedLine ? (
-                                <Badge variant="secondary">na faktuře</Badge>
-                              ) : null}
+                        return (
+                          <li
+                            key={item.id}
+                            className={cn(
+                              "grid grid-cols-[minmax(0,1fr)_auto] gap-3 rounded-xl border bg-background/45 p-3 transition-colors hover:bg-muted/55",
+                              isSelected && "border-primary/45 bg-primary/10"
+                            )}
+                          >
+                            <div className="min-w-0">
+                              <p className="text-sm leading-snug font-medium">
+                                {item.name}
+                              </p>
+                              <div className="mt-3 flex flex-wrap items-center gap-2">
+                                <Badge variant="outline">
+                                  {item.sourceUnit}
+                                </Badge>
+                                <span className="text-base font-semibold tabular-nums">
+                                  {formatCurrency(item.price)}
+                                </span>
+                                {selectedLine ? (
+                                  <Badge variant="secondary">na faktuře</Badge>
+                                ) : null}
+                              </div>
                             </div>
-                          </div>
-                          {selectedLine ? (
-                            <div className="flex h-10 shrink-0 items-center gap-1 rounded-md border bg-background p-1">
+                            {selectedLine ? (
+                              <div className="flex h-10 shrink-0 items-center gap-1 rounded-full border bg-background/70 p-1">
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="size-8 rounded-full"
+                                  aria-label={`Ubrat: ${item.name}`}
+                                  onClick={() => removePriceItem(item)}
+                                >
+                                  <MinusIcon data-icon="inline-start" />
+                                </Button>
+                                <span className="min-w-12 text-center text-sm font-semibold tabular-nums">
+                                  {formatQuantity(
+                                    selectedLine.quantity,
+                                    item.billingUnit
+                                  )}
+                                </span>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="size-8 rounded-full"
+                                  aria-label={`Přidat: ${item.name}`}
+                                  onClick={() => addPriceItem(item)}
+                                >
+                                  <PlusIcon data-icon="inline-start" />
+                                </Button>
+                              </div>
+                            ) : (
                               <Button
                                 size="icon"
-                                variant="ghost"
-                                className="size-8"
-                                aria-label={`Ubrat: ${item.name}`}
-                                onClick={() => removePriceItem(item)}
-                              >
-                                <MinusIcon data-icon="inline-start" />
-                              </Button>
-                              <span className="min-w-12 text-center text-sm font-semibold tabular-nums">
-                                {formatQuantity(
-                                  selectedLine.quantity,
-                                  item.billingUnit
-                                )}
-                              </span>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                className="size-8"
+                                className="rounded-full"
                                 aria-label={`Přidat: ${item.name}`}
                                 onClick={() => addPriceItem(item)}
                               >
                                 <PlusIcon data-icon="inline-start" />
                               </Button>
-                            </div>
-                          ) : (
-                            <Button
-                              size="icon"
-                              variant="outline"
-                              aria-label={`Přidat: ${item.name}`}
-                              onClick={() => addPriceItem(item)}
-                            >
-                              <PlusIcon data-icon="inline-start" />
-                            </Button>
-                          )}
-                        </li>
-                      )
-                    })}
-                  </ul>
-                ) : (
-                  <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-                    Nic nenalezeno. Zkus kratší hledaný výraz nebo jinou
-                    kategorii.
-                  </div>
-                )}
-              </div>
-            </CardContent>
+                            )}
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  ) : (
+                    <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
+                      Nic nenalezeno. Zkus kratší hledaný výraz nebo jinou
+                      kategorii.
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="app-panel hidden h-fit lg:block">
+            <InvoiceLinesEditor
+              lines={draft.lines}
+              total={total}
+              onAddCustomLine={() => addLine(createEmptyLine())}
+              onRemoveLine={removeLine}
+              onUpdateLine={updateLine}
+            />
           </Card>
         </div>
       </main>
@@ -1821,11 +1660,244 @@ function App() {
       <MobileEditorActionBar
         authReady={authReady}
         isSyncing={syncing}
+        lines={draft.lines}
+        onAddCustomLine={() => addLine(createEmptyLine())}
         onExport={handleExportInvoice}
+        onRemoveLine={removeLine}
         onSave={handleSaveInvoice}
+        onUpdateLine={updateLine}
         total={total}
       />
     </AppShell>
+  )
+}
+
+function InvoiceLinesEditor({
+  lines,
+  onAddCustomLine,
+  onRemoveLine,
+  onUpdateLine,
+  total,
+}: {
+  lines: InvoiceLine[]
+  onAddCustomLine: () => void
+  onRemoveLine: (id: string) => void
+  onUpdateLine: (id: string, changes: Partial<InvoiceLine>) => void
+  total: number
+}) {
+  return (
+    <>
+      <CardHeader>
+        <CardTitle>Přidané položky</CardTitle>
+        <CardDescription>
+          Tady vidíš a upravuješ všechno, co půjde na fakturu.
+        </CardDescription>
+        <CardAction>
+          <Button variant="outline" onClick={onAddCustomLine}>
+            <FilePlus2Icon data-icon="inline-start" />
+            Vlastní
+          </Button>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-background/45 p-3">
+          <Badge variant="secondary">{lines.length} položek</Badge>
+          <strong className="text-2xl font-semibold tabular-nums">
+            {formatCurrency(total)}
+          </strong>
+        </div>
+
+        {lines.length === 0 ? (
+          <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
+            Přidej položku z ceníku vlevo nebo vlastní řádek.
+          </div>
+        ) : null}
+
+        {lines.length > 0 ? (
+          <div className="flex flex-col gap-3 md:hidden">
+            {lines.map((line) => (
+              <div
+                key={line.id}
+                className="flex flex-col gap-3 rounded-lg border bg-background/45 p-3"
+              >
+                <div className="flex items-start gap-2">
+                  <Textarea
+                    value={line.description}
+                    className="min-h-14 flex-1 resize-y text-sm"
+                    onChange={(event) =>
+                      onUpdateLine(line.id, {
+                        description: event.target.value,
+                      })
+                    }
+                  />
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="shrink-0"
+                    aria-label="Odebrat položku"
+                    onClick={() => onRemoveLine(line.id)}
+                  >
+                    <Trash2Icon />
+                  </Button>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <Field>
+                    <FieldLabel>
+                      {line.unitLabel === "hod" ? "h:mm" : "Množství"}
+                    </FieldLabel>
+                    {line.unitLabel === "hod" ? (
+                      <HoursInput
+                        value={line.quantity}
+                        className="text-right"
+                        onChange={(value) =>
+                          onUpdateLine(line.id, { quantity: value })
+                        }
+                      />
+                    ) : (
+                      <Input
+                        inputMode="decimal"
+                        value={line.quantity}
+                        className="text-right"
+                        onChange={(event) =>
+                          onUpdateLine(line.id, {
+                            quantity: normalizeMoneyInput(event.target.value),
+                          })
+                        }
+                      />
+                    )}
+                  </Field>
+                  <Field>
+                    <FieldLabel>Jedn.</FieldLabel>
+                    <Input
+                      value={line.unitLabel}
+                      placeholder="ks"
+                      onChange={(event) =>
+                        onUpdateLine(line.id, {
+                          unitLabel: event.target.value,
+                        })
+                      }
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel>Cena / j.</FieldLabel>
+                    <Input
+                      inputMode="decimal"
+                      value={line.unitPrice}
+                      className="text-right"
+                      onChange={(event) =>
+                        onUpdateLine(line.id, {
+                          unitPrice: normalizeMoneyInput(event.target.value),
+                        })
+                      }
+                    />
+                  </Field>
+                </div>
+                <p className="text-right text-sm font-medium">
+                  Celkem: {formatCurrency(line.quantity * line.unitPrice)}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {lines.length > 0 ? (
+          <div className="hidden overflow-x-auto rounded-lg border md:block">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="min-w-80">Popis</TableHead>
+                  <TableHead className="w-24 text-right">Množství</TableHead>
+                  <TableHead className="w-20">Jedn.</TableHead>
+                  <TableHead className="w-32 text-right">Cena</TableHead>
+                  <TableHead className="w-32 text-right">Celkem</TableHead>
+                  <TableHead className="w-12" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {lines.map((line) => (
+                  <TableRow key={line.id}>
+                    <TableCell className="min-w-80 whitespace-normal">
+                      <Textarea
+                        value={line.description}
+                        className="min-h-16 resize-y"
+                        onChange={(event) =>
+                          onUpdateLine(line.id, {
+                            description: event.target.value,
+                          })
+                        }
+                      />
+                    </TableCell>
+                    <TableCell>
+                      {line.unitLabel === "hod" ? (
+                        <HoursInput
+                          value={line.quantity}
+                          className="text-right"
+                          onChange={(value) =>
+                            onUpdateLine(line.id, { quantity: value })
+                          }
+                        />
+                      ) : (
+                        <Input
+                          inputMode="decimal"
+                          value={line.quantity}
+                          className="text-right"
+                          onChange={(event) =>
+                            onUpdateLine(line.id, {
+                              quantity: normalizeMoneyInput(event.target.value),
+                            })
+                          }
+                        />
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        value={line.unitLabel}
+                        placeholder="ks"
+                        onChange={(event) =>
+                          onUpdateLine(line.id, {
+                            unitLabel: event.target.value,
+                          })
+                        }
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        inputMode="decimal"
+                        value={line.unitPrice}
+                        className="text-right"
+                        onChange={(event) =>
+                          onUpdateLine(line.id, {
+                            unitPrice: normalizeMoneyInput(event.target.value),
+                          })
+                        }
+                      />
+                    </TableCell>
+                    <TableCell className="text-right font-medium">
+                      {formatCurrency(line.quantity * line.unitPrice)}
+                    </TableCell>
+                    <TableCell>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            aria-label="Odebrat položku"
+                            onClick={() => onRemoveLine(line.id)}
+                          >
+                            <Trash2Icon />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Odebrat</TooltipContent>
+                      </Tooltip>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        ) : null}
+      </CardContent>
+    </>
   )
 }
 
@@ -1839,12 +1911,12 @@ function AppShell({
   userEmail?: string
 }) {
   return (
-    <div className="min-h-svh bg-background text-foreground">
-      <header className="no-print sticky top-0 z-30 border-b bg-background/95 backdrop-blur">
-        <div className="mx-auto flex max-w-[1800px] flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+    <div className="app-cockpit min-h-svh text-foreground">
+      <header className="no-print sticky top-0 z-30 border-b bg-background/82 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-[1800px] flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
           <div className="min-w-0 shrink">
             <div className="flex items-center gap-2">
-              <h1 className="text-lg leading-tight font-semibold sm:text-2xl">
+              <h1 className="text-xl leading-tight font-semibold sm:text-3xl">
                 Faktury pro Štěpu
               </h1>
               <Badge variant="secondary" className="hidden sm:inline-flex">
@@ -1898,7 +1970,7 @@ function AuthCard({
   const hasMissingEnv = missingEnv.length > 0
 
   return (
-    <Card>
+    <Card className="app-panel">
       <CardHeader>
         <CardTitle>Databáze</CardTitle>
         <CardDescription>
@@ -1965,7 +2037,7 @@ function InvoiceStatsCard({ invoices }: { invoices: InvoiceSummary[] }) {
   const stats = useMemo(() => createInvoiceStats(invoices), [invoices])
 
   return (
-    <Card>
+    <Card className="app-panel">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <CircleDollarSignIcon data-icon="inline-start" />
@@ -1974,34 +2046,40 @@ function InvoiceStatsCard({ invoices }: { invoices: InvoiceSummary[] }) {
         <CardDescription>Rychlý stav uložených faktur.</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
           <StatTile
             label="Doma"
+            tone="success"
             value={formatCurrency(stats.paidTotal)}
             detail={`${formatInvoiceCount(stats.paidCount)} zaplaceno`}
           />
           <StatTile
             label="Po splatnosti"
+            tone="danger"
             value={formatCurrency(stats.overdueTotal)}
             detail={formatInvoiceCount(stats.overdueCount)}
           />
           <StatTile
             label="Připravit / odeslat"
+            tone="info"
             value={formatCurrency(stats.waitingSendTotal)}
             detail={formatInvoiceCount(stats.waitingSendCount)}
           />
           <StatTile
             label="Čeká na platbu"
+            tone="primary"
             value={formatCurrency(stats.waitingPaymentTotal)}
             detail={formatInvoiceCount(stats.waitingPaymentCount)}
           />
           <StatTile
             label="Tento měsíc"
+            tone="accent"
             value={formatCurrency(stats.thisMonthTotal)}
             detail={formatInvoiceCount(stats.thisMonthCount)}
           />
           <StatTile
             label="Letos"
+            tone="warning"
             value={formatCurrency(stats.thisYearTotal)}
             detail={formatInvoiceCount(stats.thisYearCount)}
           />
@@ -2047,7 +2125,7 @@ function InvoiceFollowUpCard({
   const hasOverdue = followUps.some((item) => item.urgency === "overdue")
 
   return (
-    <Card>
+    <Card className="app-panel">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <MessageSquareTextIcon data-icon="inline-start" />K řešení
@@ -2199,7 +2277,12 @@ function InvoiceFollowUpCard({
   )
 }
 
-type BankInboxCategory = "ready" | "mismatch" | "unknown" | "no_match" | "resolved"
+type BankInboxCategory =
+  | "ready"
+  | "mismatch"
+  | "unknown"
+  | "no_match"
+  | "resolved"
 
 function categorizeBankTransaction(
   transaction: BankTransactionSummary,
@@ -2294,7 +2377,7 @@ function BankTransactionsCard({
   const matchedCount = categorizedImports.filter((item) => item.invoice).length
 
   return (
-    <Card>
+    <Card className="app-panel">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <BanknoteIcon data-icon="inline-start" />
@@ -2496,146 +2579,133 @@ function BankTransactionsCard({
         ) : (
           <>
             <ul className="flex flex-col gap-2">
-              {visibleImports.map(
-                ({ transaction, invoice, category }) => {
-                  const canMarkPaid =
-                    category === "ready" && invoice !== null
-                  const needsLink =
-                    category === "unknown" || category === "no_match"
-                  const isMismatch = category === "mismatch"
-                  const isResolved = category === "resolved"
+              {visibleImports.map(({ transaction, invoice, category }) => {
+                const canMarkPaid = category === "ready" && invoice !== null
+                const needsLink =
+                  category === "unknown" || category === "no_match"
+                const isMismatch = category === "mismatch"
+                const isResolved = category === "resolved"
 
-                  return (
-                    <li
-                      key={transaction.id}
-                      className={cn(
-                        "rounded-lg border bg-card p-3",
-                        isResolved && "opacity-50"
-                      )}
-                    >
-                      <div className="flex flex-col gap-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge
-                            variant={getBankInboxBadgeVariant(category)}
-                          >
-                            {getBankInboxLabel(category)}
-                          </Badge>
-                          <span className="font-medium tabular-nums">
-                            {formatCurrency(Number(transaction.amount) || 0)}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {formatDate(transaction.booked_at)}
-                          </span>
-                        </div>
-
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium">
-                            {invoice
-                              ? `${invoice.invoice_number} · ${
-                                  invoice.project_title ||
-                                  invoice.customer_name
-                                }`
-                              : transaction.counterparty_name ||
-                                transaction.message ||
-                                "Bankovní pohyb"}
-                          </p>
-                          <p className="mt-0.5 text-xs text-muted-foreground">
-                            {transaction.variable_symbol
-                              ? `VS ${transaction.variable_symbol}`
-                              : "Bez variabilního symbolu"}
-                            {transaction.counterparty_name && !invoice
-                              ? ` · ${transaction.counterparty_name}`
-                              : ""}
-                          </p>
-                          {isMismatch && invoice ? (
-                            <p className="mt-1 text-xs font-medium text-destructive">
-                              Faktura{" "}
-                              {formatCurrency(
-                                Number(invoice.total_amount) || 0
-                              )}{" "}
-                              · platba{" "}
-                              {formatCurrency(
-                                Number(transaction.amount) || 0
-                              )}{" "}
-                              — rozdíl{" "}
-                              {formatCurrency(
-                                Math.abs(
-                                  Number(invoice.total_amount) -
-                                    Number(transaction.amount)
-                                )
-                              )}
-                            </p>
-                          ) : null}
-                        </div>
-
-                        {needsLink ? (
-                          <div className="flex items-center gap-2">
-                            <Select
-                              value={transaction.invoice_id ?? ""}
-                              onValueChange={(val) =>
-                                onLinkTransaction(
-                                  transaction.id,
-                                  val || null
-                                )
-                              }
-                            >
-                              <SelectTrigger className="h-8 flex-1 text-xs">
-                                <SelectValue placeholder="Přiřadit fakturu ručně…" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {unpaidInvoices.map((inv) => (
-                                  <SelectItem key={inv.id} value={inv.id}>
-                                    {inv.invoice_number} ·{" "}
-                                    {inv.project_title || inv.customer_name} ·{" "}
-                                    {formatCurrency(
-                                      Number(inv.total_amount) || 0
-                                    )}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        ) : null}
-
-                        <div className="flex flex-wrap gap-2">
-                          {invoice ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={isSyncing}
-                              onClick={() => onLoadInvoice(invoice.id)}
-                            >
-                              <PencilIcon data-icon="inline-start" />
-                              Otevřít
-                            </Button>
-                          ) : null}
-                          {canMarkPaid ? (
-                            <Button
-                              size="sm"
-                              disabled={isSyncing}
-                              onClick={() => onMarkPaid(invoice!.id)}
-                            >
-                              <CheckCircle2Icon data-icon="inline-start" />
-                              Označit zaplaceno
-                            </Button>
-                          ) : null}
-                          {isMismatch && invoice ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={isSyncing}
-                              onClick={() => onMarkPaid(invoice.id)}
-                            >
-                              <CheckCircle2Icon data-icon="inline-start" />
-                              Označit zaplaceno přesto
-                            </Button>
-                          ) : null}
-                        </div>
+                return (
+                  <li
+                    key={transaction.id}
+                    className={cn(
+                      "rounded-lg border bg-card p-3",
+                      isResolved && "opacity-50"
+                    )}
+                  >
+                    <div className="flex flex-col gap-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant={getBankInboxBadgeVariant(category)}>
+                          {getBankInboxLabel(category)}
+                        </Badge>
+                        <span className="font-medium tabular-nums">
+                          {formatCurrency(Number(transaction.amount) || 0)}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {formatDate(transaction.booked_at)}
+                        </span>
                       </div>
-                    </li>
-                  )
-                }
-              )}
+
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">
+                          {invoice
+                            ? `${invoice.invoice_number} · ${
+                                invoice.project_title || invoice.customer_name
+                              }`
+                            : transaction.counterparty_name ||
+                              transaction.message ||
+                              "Bankovní pohyb"}
+                        </p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {transaction.variable_symbol
+                            ? `VS ${transaction.variable_symbol}`
+                            : "Bez variabilního symbolu"}
+                          {transaction.counterparty_name && !invoice
+                            ? ` · ${transaction.counterparty_name}`
+                            : ""}
+                        </p>
+                        {isMismatch && invoice ? (
+                          <p className="mt-1 text-xs font-medium text-destructive">
+                            Faktura{" "}
+                            {formatCurrency(Number(invoice.total_amount) || 0)}{" "}
+                            · platba{" "}
+                            {formatCurrency(Number(transaction.amount) || 0)} —
+                            rozdíl{" "}
+                            {formatCurrency(
+                              Math.abs(
+                                Number(invoice.total_amount) -
+                                  Number(transaction.amount)
+                              )
+                            )}
+                          </p>
+                        ) : null}
+                      </div>
+
+                      {needsLink ? (
+                        <div className="flex items-center gap-2">
+                          <Select
+                            value={transaction.invoice_id ?? ""}
+                            onValueChange={(val) =>
+                              onLinkTransaction(transaction.id, val || null)
+                            }
+                          >
+                            <SelectTrigger className="h-8 flex-1 text-xs">
+                              <SelectValue placeholder="Přiřadit fakturu ručně…" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {unpaidInvoices.map((inv) => (
+                                <SelectItem key={inv.id} value={inv.id}>
+                                  {inv.invoice_number} ·{" "}
+                                  {inv.project_title || inv.customer_name} ·{" "}
+                                  {formatCurrency(
+                                    Number(inv.total_amount) || 0
+                                  )}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      ) : null}
+
+                      <div className="flex flex-wrap gap-2">
+                        {invoice ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={isSyncing}
+                            onClick={() => onLoadInvoice(invoice.id)}
+                          >
+                            <PencilIcon data-icon="inline-start" />
+                            Otevřít
+                          </Button>
+                        ) : null}
+                        {canMarkPaid ? (
+                          <Button
+                            size="sm"
+                            disabled={isSyncing}
+                            onClick={() => onMarkPaid(invoice!.id)}
+                          >
+                            <CheckCircle2Icon data-icon="inline-start" />
+                            Označit zaplaceno
+                          </Button>
+                        ) : null}
+                        {isMismatch && invoice ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={isSyncing}
+                            onClick={() => onMarkPaid(invoice.id)}
+                          >
+                            <CheckCircle2Icon data-icon="inline-start" />
+                            Označit zaplaceno přesto
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
+                  </li>
+                )
+              })}
             </ul>
 
             {resolvedItems.length > 0 ? (
@@ -2693,16 +2763,32 @@ function getBankInboxBadgeVariant(
 function StatTile({
   detail,
   label,
+  tone = "primary",
   value,
 }: {
   detail: string
   label: string
+  tone?: "accent" | "danger" | "info" | "primary" | "success" | "warning"
   value: string
 }) {
+  const toneClass = {
+    accent: "app-tone-accent",
+    danger: "app-tone-danger",
+    info: "app-tone-info",
+    primary: "app-tone-primary",
+    success: "app-tone-success",
+    warning: "app-tone-warning",
+  }[tone]
+
   return (
-    <div className="rounded-lg border bg-card p-3">
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <p className="mt-1 text-base leading-tight font-semibold">{value}</p>
+    <div className="min-h-32 rounded-xl border bg-background/45 p-4">
+      <div className="flex items-center gap-3">
+        <span className={cn("size-3 rounded-full", toneClass)} />
+        <p className="text-sm font-medium text-muted-foreground">{label}</p>
+      </div>
+      <p className="mt-7 text-2xl leading-tight font-semibold tabular-nums md:text-3xl">
+        {value}
+      </p>
       <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
     </div>
   )
@@ -2923,7 +3009,6 @@ function isBankAmountMatchingInvoice(
   return Math.abs(Number(amount) - Number(invoice.total_amount)) < 0.01
 }
 
-
 function getBankPreviewLabel(item: BankImportPreviewItem) {
   if (item.invoice?.status === "paid" && item.amountMatches) {
     return "už zaplaceno"
@@ -3064,7 +3149,7 @@ function SavedInvoicesCard({
   }, [invoices, search, sortKey, sortDir])
 
   return (
-    <Card>
+    <Card className="app-panel">
       <CardHeader>
         <CardTitle>Uložené faktury</CardTitle>
         <CardDescription>
@@ -3125,8 +3210,8 @@ function SavedInvoicesCard({
                   <li
                     key={invoice.id}
                     className={cn(
-                      "rounded-lg border bg-card",
-                      isActive && "border-primary/40 bg-primary/5"
+                      "rounded-xl border bg-background/45 shadow-sm",
+                      isActive && "border-primary/45 bg-primary/10"
                     )}
                   >
                     <button
@@ -3266,7 +3351,7 @@ function SavedInvoicesCard({
             </ul>
 
             {/* Desktop: sortable table with context menu */}
-            <div className="hidden overflow-x-auto rounded-lg border md:block">
+            <div className="hidden overflow-x-auto rounded-xl border bg-background/30 md:block">
               <Table>
                 <TableHeader>
                   <TableRow className="text-muted-foreground">
@@ -3357,7 +3442,7 @@ function SavedInvoicesCard({
                       <ContextMenu key={invoice.id}>
                         <ContextMenuTrigger asChild>
                           <TableRow
-                            className="cursor-pointer hover:bg-muted/50 data-[active=true]:bg-muted"
+                            className="cursor-pointer hover:bg-muted/45 data-[active=true]:bg-primary/10"
                             data-active={activeInvoiceId === invoice.id}
                             onClick={() => onLoad(invoice.id)}
                           >
@@ -3430,7 +3515,11 @@ function SavedInvoicesCard({
                           </ContextMenuItem>
                           {invoice.contact_email ? (
                             <ContextMenuItem asChild>
-                              <a href={buildReminderMailtoHref(invoice) ?? undefined}>
+                              <a
+                                href={
+                                  buildReminderMailtoHref(invoice) ?? undefined
+                                }
+                              >
                                 <MailIcon className="size-4" />
                                 Otevřít v e-mailu
                               </a>
@@ -3496,7 +3585,7 @@ function InvoicePreviewOverlay({
 }) {
   return (
     <section className="invoice-preview-overlay fixed inset-0 z-50 flex flex-col bg-background text-foreground">
-      <div className="no-print flex flex-col gap-3 border-b bg-background px-4 py-3 md:flex-row md:items-center md:justify-between">
+      <div className="no-print flex flex-col gap-3 border-b bg-background/95 px-4 py-3 backdrop-blur-xl md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-xl font-semibold">Náhled faktury</h2>
@@ -3538,14 +3627,22 @@ function InvoicePreviewOverlay({
 function MobileEditorActionBar({
   authReady,
   isSyncing,
+  lines,
+  onAddCustomLine,
   onExport,
+  onRemoveLine,
   onSave,
+  onUpdateLine,
   total,
 }: {
   authReady: boolean
   isSyncing: boolean
+  lines: InvoiceLine[]
+  onAddCustomLine: () => void
   onExport: () => void
+  onRemoveLine: (id: string) => void
   onSave: () => void
+  onUpdateLine: (id: string, changes: Partial<InvoiceLine>) => void
   total: number
 }) {
   return (
@@ -3558,15 +3655,42 @@ function MobileEditorActionBar({
           aria-label="Přejít na ceník"
         >
           <a href="#cenik-sekce">
-            <ShoppingCartIcon />
+            <ShoppingCartIcon data-icon="inline-start" />
           </a>
         </Button>
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-medium text-muted-foreground">K úhradě</p>
+          <p className="text-xs font-medium text-muted-foreground">
+            {lines.length} položek · K úhradě
+          </p>
           <p className="truncate text-base font-semibold tabular-nums">
             {formatCurrency(total)}
           </p>
         </div>
+        <Drawer>
+          <DrawerTrigger asChild>
+            <Button size="lg" variant="outline">
+              <ShoppingCartIcon data-icon="inline-start" />
+              Položky
+            </Button>
+          </DrawerTrigger>
+          <DrawerContent className="max-h-[82svh]">
+            <DrawerHeader>
+              <DrawerTitle>Položky faktury</DrawerTitle>
+              <DrawerDescription>
+                Přehled a úprava všeho, co je právě přidané na fakturu.
+              </DrawerDescription>
+            </DrawerHeader>
+            <div className="overflow-y-auto pb-4">
+              <InvoiceLinesEditor
+                lines={lines}
+                total={total}
+                onAddCustomLine={onAddCustomLine}
+                onRemoveLine={onRemoveLine}
+                onUpdateLine={onUpdateLine}
+              />
+            </div>
+          </DrawerContent>
+        </Drawer>
         <Button
           size="icon-lg"
           variant="outline"
@@ -4126,11 +4250,15 @@ function readStoredDraft() {
     const parsed = JSON.parse(stored) as Partial<InvoiceDraft>
     const fallback = createDefaultDraft()
 
-    return {
+    const nextDraft = {
       ...fallback,
       ...parsed,
       lines: Array.isArray(parsed.lines) ? parsed.lines : fallback.lines,
     }
+
+    assertInvoiceDraftInvariant(nextDraft, "stored draft")
+
+    return nextDraft
   } catch {
     return createDefaultDraft()
   }

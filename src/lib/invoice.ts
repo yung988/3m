@@ -15,6 +15,14 @@ export type InvoiceStatus =
   | "overdue"
   | "cancelled"
 
+const invoiceStatuses = [
+  "draft",
+  "issued",
+  "paid",
+  "overdue",
+  "cancelled",
+] as const
+
 export type InvoiceDraft = {
   id?: string
   invoiceNumber: string
@@ -65,10 +73,14 @@ const numberFormatter = new Intl.NumberFormat("cs-CZ", {
 })
 
 export function formatCurrency(value: number) {
+  assertFiniteAmount(value, "currency value")
+
   return currencyFormatter.format(value)
 }
 
 export function formatPlainCurrency(value: number) {
+  assertFiniteAmount(value, "plain currency value")
+
   return numberFormatter.format(value) + ",00 Kč"
 }
 
@@ -125,6 +137,8 @@ export function formatHoursDisplay(value: number): string {
 }
 
 export function formatQuantity(quantity: number, unitLabel: string) {
+  assertFiniteAmount(quantity, "invoice line quantity")
+
   const amount =
     unitLabel === "hod"
       ? formatHoursDisplay(quantity)
@@ -134,9 +148,58 @@ export function formatQuantity(quantity: number, unitLabel: string) {
 }
 
 export function calculateTotal(lines: InvoiceLine[]) {
-  return lines.reduce((total, line) => {
+  const total = lines.reduce((total, line, index) => {
+    assertInvoiceLineInvariant(line, `invoice line ${index + 1}`)
+
     return total + line.quantity * line.unitPrice
   }, 0)
+
+  assertFiniteAmount(total, "invoice total")
+
+  return total
+}
+
+export function isInvoiceStatus(value: unknown): value is InvoiceStatus {
+  return invoiceStatuses.includes(value as InvoiceStatus)
+}
+
+export function assertInvoiceLineInvariant(
+  line: InvoiceLine,
+  context = "invoice line"
+): asserts line is InvoiceLine {
+  if (!line.id.trim()) {
+    throw new Error(`${context}: missing line id`)
+  }
+
+  assertFiniteAmount(line.quantity, `${context}: quantity`)
+  assertFiniteAmount(line.unitPrice, `${context}: unit price`)
+}
+
+export function assertInvoiceDraftInvariant(
+  draft: InvoiceDraft,
+  context = "invoice draft"
+): asserts draft is InvoiceDraft {
+  if (!isInvoiceStatus(draft.status)) {
+    throw new Error(`${context}: unknown invoice status "${draft.status}"`)
+  }
+
+  assertFiniteAmount(draft.exportCount, `${context}: export count`)
+
+  if (draft.exportCount < 0) {
+    throw new Error(`${context}: export count cannot be negative`)
+  }
+
+  const lineIds = new Set<string>()
+
+  draft.lines.forEach((line, index) => {
+    assertInvoiceLineInvariant(line, `${context}: line ${index + 1}`)
+
+    if (lineIds.has(line.id)) {
+      throw new Error(`${context}: duplicate line id "${line.id}"`)
+    }
+
+    lineIds.add(line.id)
+  })
 }
 
 export function createLineFromPriceItem(item: PriceItem): InvoiceLine {
@@ -187,6 +250,9 @@ export function createDefaultDraft(): InvoiceDraft {
 }
 
 export function buildPaymentQrString(draft: InvoiceDraft, total: number) {
+  assertInvoiceDraftInvariant(draft, "payment QR draft")
+  assertFiniteAmount(total, "payment QR total")
+
   const message = sanitizeQrValue(`Faktura ${draft.invoiceNumber}`)
 
   return [
@@ -203,6 +269,12 @@ export function normalizeMoneyInput(value: string) {
   const normalized = Number(value.replace(",", "."))
 
   return Number.isFinite(normalized) ? normalized : 0
+}
+
+function assertFiniteAmount(value: number, context: string) {
+  if (!Number.isFinite(value)) {
+    throw new Error(`${context}: expected finite number`)
+  }
 }
 
 function toDateInput(date: Date) {
