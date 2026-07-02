@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react"
 import type { Session } from "@supabase/supabase-js"
@@ -149,6 +150,24 @@ import {
   type InvoiceSummary,
 } from "@/lib/invoice-repository"
 import { missingSupabaseEnv, supabase } from "@/lib/supabase"
+
+function useScrollHide() {
+  const [hidden, setHidden] = useState(false)
+  const lastY = useRef(0)
+
+  useEffect(() => {
+    function onScroll() {
+      const y = window.scrollY
+      if (Math.abs(y - lastY.current) < 8) return
+      setHidden(y > lastY.current && y > 56)
+      lastY.current = y
+    }
+    window.addEventListener("scroll", onScroll, { passive: true })
+    return () => window.removeEventListener("scroll", onScroll)
+  }, [])
+
+  return hidden
+}
 
 const STORAGE_KEY = "faktury-pro-stepu:draft:v2"
 const FOLLOW_UP_SOON_DAYS = 7
@@ -1916,13 +1935,20 @@ function AppShell({
   children: ReactNode
   userEmail?: string
 }) {
+  const headerHidden = useScrollHide()
+
   return (
     <div className="app-cockpit min-h-svh text-foreground">
-      <header className="no-print sticky top-0 z-30 border-b bg-background/82 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-[1800px] flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+      <header
+        className={cn(
+          "no-print sticky top-0 z-30 border-b bg-background/82 backdrop-blur-xl transition-transform duration-200",
+          headerHidden && "-translate-y-full"
+        )}
+      >
+        <div className="mx-auto flex max-w-[1800px] flex-row items-center justify-between gap-2 px-4 py-2.5 sm:py-4 sm:gap-3">
           <div className="min-w-0 shrink">
             <div className="flex items-center gap-2">
-              <h1 className="text-xl leading-tight font-semibold sm:text-3xl">
+              <h1 className="text-base leading-tight font-semibold sm:text-3xl">
                 Faktury pro Štěpu
               </h1>
               <Badge variant="secondary" className="hidden sm:inline-flex">
@@ -1930,13 +1956,13 @@ function AppShell({
               </Badge>
             </div>
             {userEmail ? (
-              <p className="truncate text-xs text-muted-foreground sm:text-sm">
+              <p className="hidden truncate text-xs text-muted-foreground sm:block sm:text-sm">
                 {userEmail}
               </p>
             ) : null}
           </div>
           {actions ? (
-            <div className="flex w-full items-center gap-2 overflow-x-auto pb-1 sm:w-auto sm:shrink-0 sm:pb-0">
+            <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto sm:gap-2">
               {actions}
             </div>
           ) : null}
@@ -2787,15 +2813,15 @@ function StatTile({
   }[tone]
 
   return (
-    <div className="min-h-32 rounded-xl border bg-background/45 p-4">
-      <div className="flex items-center gap-3">
-        <span className={cn("size-3 rounded-full", toneClass)} />
-        <p className="text-sm font-medium text-muted-foreground">{label}</p>
+    <div className="rounded-xl border bg-background/45 p-3 sm:p-4">
+      <div className="flex items-center gap-2">
+        <span className={cn("size-2.5 shrink-0 rounded-full sm:size-3", toneClass)} />
+        <p className="text-xs font-medium text-muted-foreground sm:text-sm">{label}</p>
       </div>
-      <p className="mt-7 text-2xl leading-tight font-semibold tabular-nums md:text-3xl">
+      <p className="mt-2 text-xl leading-tight font-semibold tabular-nums sm:mt-5 sm:text-2xl md:text-3xl">
         {value}
       </p>
-      <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+      <p className="mt-0.5 text-xs text-muted-foreground">{detail}</p>
     </div>
   )
 }
@@ -3591,7 +3617,10 @@ function InvoicePreviewOverlay({
 }) {
   return (
     <section className="invoice-preview-overlay fixed inset-0 z-50 flex flex-col bg-background text-foreground">
-      <div className="no-print flex flex-col gap-3 border-b bg-background/95 px-4 py-3 backdrop-blur-xl md:flex-row md:items-center md:justify-between">
+      <div
+        className="no-print flex flex-col gap-3 border-b bg-background/95 px-4 py-3 backdrop-blur-xl md:flex-row md:items-center md:justify-between"
+        style={{ paddingTop: "max(12px, env(safe-area-inset-top))" }}
+      >
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-xl font-semibold">Náhled faktury</h2>
@@ -3652,7 +3681,10 @@ function MobileEditorActionBar({
   total: number
 }) {
   return (
-    <div className="no-print fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 px-4 py-3 shadow-[0_-12px_30px_oklch(0.18_0.012_95_/_12%)] backdrop-blur lg:hidden">
+    <div
+      className="no-print fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 px-4 pt-3 shadow-[0_-12px_30px_oklch(0.18_0.012_95_/_12%)] backdrop-blur lg:hidden"
+      style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}
+    >
       <div className="mx-auto flex max-w-[1400px] items-center gap-2">
         <Button
           asChild
