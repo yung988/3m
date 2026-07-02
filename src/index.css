@@ -128,6 +128,15 @@
     @apply font-sans;
     -webkit-tap-highlight-color: transparent;
   }
+
+  /* Prevent iOS auto-zoom on input focus */
+  @media (max-width: 768px) {
+    input,
+    textarea,
+    select {
+      font-size: 16px !important;
+    }
+  }
 }
 
 :root:not(.dark) {

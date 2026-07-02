@@ -1739,90 +1739,78 @@ function InvoiceLinesEditor({
         ) : null}
 
         {lines.length > 0 ? (
-          <div className="flex flex-col gap-3 md:hidden">
-            {lines.map((line) => (
-              <div
-                key={line.id}
-                className="flex flex-col gap-3 rounded-lg border bg-background/45 p-3"
-              >
-                <div className="flex items-start gap-2">
-                  <Textarea
-                    value={line.description}
-                    className="min-h-14 flex-1 resize-y text-sm"
-                    onChange={(event) =>
-                      onUpdateLine(line.id, {
-                        description: event.target.value,
-                      })
-                    }
-                  />
+          <ul className="flex flex-col gap-1.5 md:hidden">
+            {lines.map((line) => {
+              const matchedItem = priceList.find(
+                (item) =>
+                  item.name === line.description &&
+                  item.price === line.unitPrice
+              )
+              const color = matchedItem
+                ? categoryColors[matchedItem.category]
+                : undefined
+
+              return (
+                <li
+                  key={line.id}
+                  className={cn(
+                    "flex items-center gap-2 rounded-lg p-2.5",
+                    color ? "" : "border bg-background/45"
+                  )}
+                  style={
+                    color
+                      ? {
+                          background: color,
+                          borderColor: `color-mix(in oklch, ${color}, black 20%)`,
+                        }
+                      : undefined
+                  }
+                >
+                  <div className="min-w-0 flex-1">
+                    <p
+                      className={cn(
+                        "truncate text-sm font-semibold leading-snug",
+                        color ? "text-white" : ""
+                      )}
+                    >
+                      {line.description || "Bez popisu"}
+                    </p>
+                    <p
+                      className={cn(
+                        "mt-0.5 text-xs",
+                        color ? "text-white/75" : "text-muted-foreground"
+                      )}
+                    >
+                      {formatQuantity(line.quantity, line.unitLabel)} ×{" "}
+                      {formatCurrency(line.unitPrice)}
+                    </p>
+                  </div>
+                  <span
+                    className={cn(
+                      "shrink-0 text-sm font-bold tabular-nums",
+                      color ? "text-white" : ""
+                    )}
+                  >
+                    {formatCurrency(line.quantity * line.unitPrice)}
+                  </span>
                   <Button
                     size="icon"
                     variant="ghost"
-                    className="shrink-0"
+                    className={cn(
+                      "size-8 shrink-0",
+                      color
+                        ? "text-white/80 hover:bg-black/20 hover:text-white"
+                        : ""
+                    )}
                     aria-label="Odebrat položku"
                     onClick={() => onRemoveLine(line.id)}
                   >
-                    <Trash2Icon />
+                    <Trash2Icon className="size-4" />
                   </Button>
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  <Field>
-                    <FieldLabel>
-                      {line.unitLabel === "hod" ? "h:mm" : "Množství"}
-                    </FieldLabel>
-                    {line.unitLabel === "hod" ? (
-                      <HoursInput
-                        value={line.quantity}
-                        className="text-right"
-                        onChange={(value) =>
-                          onUpdateLine(line.id, { quantity: value })
-                        }
-                      />
-                    ) : (
-                      <Input
-                        inputMode="decimal"
-                        value={line.quantity}
-                        className="text-right"
-                        onChange={(event) =>
-                          onUpdateLine(line.id, {
-                            quantity: normalizeMoneyInput(event.target.value),
-                          })
-                        }
-                      />
-                    )}
-                  </Field>
-                  <Field>
-                    <FieldLabel>Jedn.</FieldLabel>
-                    <Input
-                      value={line.unitLabel}
-                      placeholder="ks"
-                      onChange={(event) =>
-                        onUpdateLine(line.id, {
-                          unitLabel: event.target.value,
-                        })
-                      }
-                    />
-                  </Field>
-                  <Field>
-                    <FieldLabel>Cena / j.</FieldLabel>
-                    <Input
-                      inputMode="decimal"
-                      value={line.unitPrice}
-                      className="text-right"
-                      onChange={(event) =>
-                        onUpdateLine(line.id, {
-                          unitPrice: normalizeMoneyInput(event.target.value),
-                        })
-                      }
-                    />
-                  </Field>
-                </div>
-                <p className="text-right text-sm font-medium">
-                  Celkem: {formatCurrency(line.quantity * line.unitPrice)}
-                </p>
-              </div>
-            ))}
-          </div>
+                </li>
+              )
+            })}
+          </ul>
         ) : null}
 
         {lines.length > 0 ? (
