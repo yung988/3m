@@ -104,7 +104,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { priceCategories, priceList, type PriceItem } from "@/data/price-list"
+import { categoryColors, priceCategories, priceList, type PriceItem } from "@/data/price-list"
 import {
   parseAirBankXml,
   type ParsedAirBankTransaction,
@@ -1559,42 +1559,48 @@ function App() {
                       {filteredItems.map(({ item, selectedLine }) => {
                         const isSelected = Boolean(selectedLine)
 
+                        const categoryColor = categoryColors[item.category]
+
                         return (
                           <li
                             key={item.id}
                             className={cn(
-                              "grid grid-cols-[minmax(0,1fr)_auto] gap-3 rounded-xl border bg-background/45 p-3 transition-colors hover:bg-muted/55",
-                              isSelected && "border-primary/45 bg-primary/10"
+                              "grid grid-cols-[minmax(0,1fr)_auto] gap-3 rounded-xl border p-3 transition-opacity",
+                              isSelected ? "opacity-100 ring-2 ring-white/40" : "opacity-90 hover:opacity-100"
                             )}
+                            style={{
+                              background: categoryColor,
+                              borderColor: `color-mix(in oklch, ${categoryColor}, black 20%)`,
+                            }}
                           >
                             <div className="min-w-0">
-                              <p className="text-sm leading-snug font-medium">
+                              <p className="text-sm leading-snug font-semibold text-white drop-shadow-sm">
                                 {item.name}
                               </p>
                               <div className="mt-3 flex flex-wrap items-center gap-2">
-                                <Badge variant="outline">
+                                <Badge className="border-white/30 bg-black/20 text-white hover:bg-black/30">
                                   {item.sourceUnit}
                                 </Badge>
-                                <span className="text-base font-semibold tabular-nums">
+                                <span className="text-base font-bold tabular-nums text-white drop-shadow-sm">
                                   {formatCurrency(item.price)}
                                 </span>
                                 {selectedLine ? (
-                                  <Badge variant="secondary">na faktuře</Badge>
+                                  <Badge className="bg-white/30 text-white hover:bg-white/40">na faktuře</Badge>
                                 ) : null}
                               </div>
                             </div>
                             {selectedLine ? (
-                              <div className="flex h-10 shrink-0 items-center gap-1 rounded-full border bg-background/70 p-1">
+                              <div className="flex h-10 shrink-0 items-center gap-1 rounded-full border border-white/30 bg-black/20 p-1">
                                 <Button
                                   size="icon"
                                   variant="ghost"
-                                  className="size-8 rounded-full"
+                                  className="size-8 rounded-full text-white hover:bg-white/20"
                                   aria-label={`Ubrat: ${item.name}`}
                                   onClick={() => removePriceItem(item)}
                                 >
                                   <MinusIcon data-icon="inline-start" />
                                 </Button>
-                                <span className="min-w-12 text-center text-sm font-semibold tabular-nums">
+                                <span className="min-w-12 text-center text-sm font-bold tabular-nums text-white">
                                   {formatQuantity(
                                     selectedLine.quantity,
                                     item.billingUnit
@@ -1603,7 +1609,7 @@ function App() {
                                 <Button
                                   size="icon"
                                   variant="ghost"
-                                  className="size-8 rounded-full"
+                                  className="size-8 rounded-full text-white hover:bg-white/20"
                                   aria-label={`Přidat: ${item.name}`}
                                   onClick={() => addPriceItem(item)}
                                 >
@@ -1613,7 +1619,7 @@ function App() {
                             ) : (
                               <Button
                                 size="icon"
-                                className="rounded-full"
+                                className="rounded-full bg-black/25 text-white hover:bg-black/40"
                                 aria-label={`Přidat: ${item.name}`}
                                 onClick={() => addPriceItem(item)}
                               >

@@ -455,3 +455,16 @@ export const priceList: PriceItem[] = [
 export const priceCategories = Array.from(
   new Set(priceList.map((item) => item.category))
 )
+
+export const categoryColors: Record<string, string> = {
+  "Základní elektromontáže FVE": "oklch(0.75 0.17 60)",
+  "Standardní příplatky k instalaci": "oklch(0.78 0.16 85)",
+  "Rozšíření existující FVE – baterie a combiner": "oklch(0.72 0.18 145)",
+  "EMR / HDR – přemístění a rekonstrukce": "oklch(0.65 0.22 28)",
+  "EV nabíječky": "oklch(0.72 0.17 245)",
+  "Smart management a monitoring": "oklch(0.70 0.17 290)",
+  "Home Assistant – instalace hardware": "oklch(0.74 0.15 195)",
+  "Výroba rozvaděčů": "oklch(0.62 0.06 240)",
+  "Ostatní elektromontážní práce": "oklch(0.68 0.18 265)",
+  "Sazby a doprava": "oklch(0.72 0.18 330)",
+}
