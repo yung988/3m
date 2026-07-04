@@ -9,6 +9,7 @@ import {
 } from "react"
 import type { Session } from "@supabase/supabase-js"
 import * as QRCode from "qrcode"
+import { toast } from "sonner"
 import {
   ArrowDownIcon,
   ArrowUpIcon,
@@ -100,6 +101,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
+import { Toaster } from "@/components/ui/sonner"
 import {
   Tooltip,
   TooltipContent,
@@ -355,11 +357,12 @@ function App() {
   const [bankImportPreview, setBankImportPreview] =
     useState<BankImportPreview | null>(null)
   const [syncing, setSyncing] = useState(false)
-  const [message, setMessage] = useState<AppMessage | null>(null)
   const [view, setView] = useState<AppView>("dashboard")
   const [previewVisible, setPreviewVisible] = useState(false)
   const [showExportIssues, setShowExportIssues] = useState(false)
   const [mobileBasicsOpen, setMobileBasicsOpen] = useState(false)
+  const [customerDetailsOpen, setCustomerDetailsOpen] = useState(false)
+  const lastSyncedDraftRef = useRef<string>(JSON.stringify(draft))
 
   const total = useMemo(() => calculateTotal(draft.lines), [draft.lines])
   const invoiceValidationIssues = useMemo(
@@ -402,14 +405,55 @@ function App() {
       .map(({ item, selectedLine }) => ({ item, selectedLine }))
   }, [draft.lines, search, selectedCategory])
 
-  const showError = useCallback((title: string, error: unknown) => {
-    setMessage({
-      title,
-      description:
-        error instanceof Error ? error.message : "Zkus akci zopakovat.",
-      variant: "destructive",
-    })
+  const notify = useCallback((message: AppMessage) => {
+    if (message.variant === "destructive") {
+      toast.error(message.title, { description: message.description })
+    } else {
+      toast(message.title, { description: message.description })
+    }
   }, [])
+
+  const showError = useCallback(
+    (title: string, error: unknown) => {
+      notify({
+        title,
+        description:
+          error instanceof Error ? error.message : "Zkus akci zopakovat.",
+        variant: "destructive",
+      })
+    },
+    [notify]
+  )
+
+  const applySyncedDraft = useCallback((next: InvoiceDraft) => {
+    lastSyncedDraftRef.current = JSON.stringify(next)
+    setDraft(next)
+  }, [])
+
+  function isDraftDirty() {
+    const hasContent =
+      draft.lines.length > 0 || Boolean(draft.projectTitle.trim())
+
+    if (!hasContent) {
+      return false
+    }
+
+    if (!draft.id) {
+      return true
+    }
+
+    return JSON.stringify(draft) !== lastSyncedDraftRef.current
+  }
+
+  function confirmDiscardDraft() {
+    if (!isDraftDirty()) {
+      return true
+    }
+
+    return window.confirm(
+      `Faktura ${draft.invoiceNumber} má neuložené změny. Zahodit je a pokračovat?`
+    )
+  }
 
   const refreshSavedInvoices = useCallback(async () => {
     try {
@@ -601,16 +645,14 @@ function App() {
   }
 
   function resetDraft() {
-    if (
-      window.confirm("Vrátit prázdnou novou fakturu a smazat rozepsané změny?")
-    ) {
-      setDraft(createDefaultDraft())
+    if (confirmDiscardDraft()) {
+      applySyncedDraft(createDefaultDraft())
     }
   }
 
   async function handleAuth() {
     if (!supabase) {
-      setMessage({
+      notify({
         title: "Chybí nastavení Supabase",
         description: `Doplň env proměnné ${missingSupabaseEnv.join(", ")} a znovu nasaď aplikaci.`,
         variant: "destructive",
@@ -619,7 +661,6 @@ function App() {
     }
 
     setAuthLoading(true)
-    setMessage(null)
 
     try {
       const credentials = {
@@ -631,8 +672,6 @@ function App() {
       if (error) {
         throw error
       }
-
-      setMessage(null)
     } catch (error) {
       showError("Přihlášení selhalo", error)
     } finally {
@@ -652,7 +691,7 @@ function App() {
       return
     }
 
-    setMessage({
+    notify({
       title: "Odhlášeno",
       description: "Rozpracovaná faktura zůstává uložená lokálně v prohlížeči.",
     })
@@ -660,7 +699,7 @@ function App() {
 
   async function handleSaveInvoice() {
     if (!user) {
-      setMessage({
+      notify({
         title: databaseIsConfigured
           ? "Nejdřív se přihlas"
           : "Chybí nastavení Supabase",
@@ -675,9 +714,9 @@ function App() {
     try {
       setSyncing(true)
       const savedDraft = await saveInvoice(draft, user)
-      setDraft(savedDraft)
+      applySyncedDraft(savedDraft)
       await refreshSavedInvoices()
-      setMessage({
+      notify({
         title: "Faktura uložena",
         description: `Doklad ${savedDraft.invoiceNumber} je uložený v Supabase.`,
       })
@@ -689,13 +728,17 @@ function App() {
   }
 
   async function handleLoadInvoice(id: string) {
+    if (!confirmDiscardDraft()) {
+      return
+    }
+
     try {
       setSyncing(true)
-      setDraft(await loadInvoice(id))
+      applySyncedDraft(await loadInvoice(id))
       setView("editor")
       setPreviewVisible(false)
       setShowExportIssues(false)
-      setMessage({
+      notify({
         title: "Faktura načtena",
         description: "Uložený doklad se propsal do editoru.",
       })
@@ -716,13 +759,13 @@ function App() {
       await deleteInvoice(id)
 
       if (draft.id === id) {
-        setDraft(createDefaultDraft())
+        applySyncedDraft(createDefaultDraft())
         setView("dashboard")
         setShowExportIssues(false)
       }
 
       await refreshSavedInvoices()
-      setMessage({
+      notify({
         title: "Faktura smazána",
         description: "Doklad a jeho řádky byly odstraněné ze Supabase.",
       })
@@ -739,11 +782,11 @@ function App() {
       const updatedDraft = await setInvoicePaid(id, isPaid)
 
       if (draft.id === id) {
-        setDraft(updatedDraft)
+        applySyncedDraft(updatedDraft)
       }
 
       await refreshSavedInvoices()
-      setMessage({
+      notify({
         title: isPaid
           ? "Faktura označena jako zaplacená"
           : "Faktura označena jako nezaplacená",
@@ -762,11 +805,11 @@ function App() {
       const updatedDraft = await markInvoiceSent(id)
 
       if (draft.id === id) {
-        setDraft(updatedDraft)
+        applySyncedDraft(updatedDraft)
       }
 
       await refreshSavedInvoices()
-      setMessage({
+      notify({
         title: "Faktura označena jako odeslaná",
         description: `Doklad ${updatedDraft.invoiceNumber} teď čeká na platbu.`,
       })
@@ -790,11 +833,11 @@ function App() {
       const updatedDraft = await markInvoiceReminded(invoice.id)
 
       if (draft.id === invoice.id) {
-        setDraft(updatedDraft)
+        applySyncedDraft(updatedDraft)
       }
 
       await refreshSavedInvoices()
-      setMessage({
+      notify({
         title: "Upomínka zkopírována",
         description: `Text pro fakturu ${invoice.invoice_number} je ve schránce a doklad je označený jako upomenutý.`,
       })
@@ -814,7 +857,7 @@ function App() {
     }
 
     if (!user) {
-      setMessage({
+      notify({
         title: "Nejdřív se přihlas",
         description: "Bankovní výpis jde uložit až pod přihlášeným účtem.",
         variant: "destructive",
@@ -834,7 +877,7 @@ function App() {
         items,
       })
 
-      setMessage({
+      notify({
         title: "Výpis připraven ke kontrole",
         description: `${items.length} pohybů načteno. ${stats.readyCount} připraveno ke spárování, ${stats.amountMismatchCount} s nesedící částkou.`,
       })
@@ -858,7 +901,7 @@ function App() {
 
       const stats = createBankImportPreviewStats(bankImportPreview.items)
       setBankImportPreview(null)
-      setMessage({
+      notify({
         title: "Bankovní výpis importován",
         description: `${imported.length} pohybů uloženo nebo aktualizováno. ${stats.matchedCount} z nich je spárovaných s fakturami.`,
       })
@@ -885,7 +928,7 @@ function App() {
     if (invoiceValidationIssues.length > 0) {
       setPreviewVisible(false)
       setShowExportIssues(true)
-      setMessage({
+      notify({
         title: "Fakturu zatím nejde označit jako odeslanou",
         description: "Oprav checklist v editoru a potom akci zopakuj.",
         variant: "destructive",
@@ -894,7 +937,7 @@ function App() {
     }
 
     if (!user) {
-      setMessage({
+      notify({
         title: databaseIsConfigured
           ? "Nejdřív se přihlas"
           : "Chybí nastavení Supabase",
@@ -907,7 +950,7 @@ function App() {
     }
 
     if (draft.status === "paid" || draft.status === "cancelled") {
-      setMessage({
+      notify({
         title: "Stav nejde změnit na odesláno",
         description:
           "Zaplacenou nebo stornovanou fakturu nech tak, případně nejdřív změň stav ručně.",
@@ -920,9 +963,9 @@ function App() {
       setSyncing(true)
       const savedDraft = await saveInvoice({ ...draft, status: "issued" }, user)
       const updatedDraft = await markInvoiceSent(savedDraft.id!)
-      setDraft(updatedDraft)
+      applySyncedDraft(updatedDraft)
       await refreshSavedInvoices()
-      setMessage({
+      notify({
         title: "Faktura označena jako odeslaná",
         description: `Doklad ${updatedDraft.invoiceNumber} teď čeká na platbu.`,
       })
@@ -937,7 +980,7 @@ function App() {
     if (invoiceValidationIssues.length > 0) {
       setPreviewVisible(false)
       setShowExportIssues(true)
-      setMessage({
+      notify({
         title: "Fakturu zatím nejde exportovat",
         description: "Oprav checklist v editoru a potom akci zopakuj.",
         variant: "destructive",
@@ -949,7 +992,7 @@ function App() {
 
     if (!previewVisible) {
       setPreviewVisible(true)
-      setMessage({
+      notify({
         title: "Zkontroluj náhled",
         description:
           "Faktura je teď zobrazená přes celou obrazovku. Pokud sedí, klikni v náhledu na Export / PDF. Po odeslání firmě ji označ jako Odesláno.",
@@ -958,7 +1001,7 @@ function App() {
     }
 
     if (!user) {
-      setMessage({
+      notify({
         title: "Export bez databázového záznamu",
         description:
           "Tisk se spustí, ale stav exportu se uloží až u přihlášené a uložené faktury.",
@@ -971,9 +1014,9 @@ function App() {
       setSyncing(true)
       const savedDraft = await saveInvoice(draft, user)
       const exportedDraft = await markInvoiceExported(savedDraft.id!)
-      setDraft(exportedDraft)
+      applySyncedDraft(exportedDraft)
       await refreshSavedInvoices()
-      setMessage({
+      notify({
         title: "Faktura označena jako exportovaná",
         description: `Doklad ${exportedDraft.invoiceNumber} má uložený čas exportu. Název PDF: ${buildInvoicePdfFileName(exportedDraft)}`,
       })
@@ -986,23 +1029,31 @@ function App() {
   }
 
   async function handleNewInvoice() {
+    if (!confirmDiscardDraft()) {
+      return
+    }
+
     const nextDraft = createDefaultDraft()
     try {
       nextDraft.invoiceNumber = await getNextInvoiceNumber()
     } catch {
       // fallback — already set in createDefaultDraft
     }
-    setDraft(nextDraft)
+    applySyncedDraft(nextDraft)
     setView("editor")
     setPreviewVisible(false)
     setShowExportIssues(false)
-    setMessage({
+    notify({
       title: "Nová faktura",
       description: `Editor je připravený pro doklad ${nextDraft.invoiceNumber}.`,
     })
   }
 
   async function handleDuplicateInvoice(id: string) {
+    if (!confirmDiscardDraft()) {
+      return
+    }
+
     try {
       setSyncing(true)
       const loaded = await loadInvoice(id)
@@ -1030,7 +1081,7 @@ function App() {
       setView("editor")
       setPreviewVisible(false)
       setShowExportIssues(false)
-      setMessage({
+      notify({
         title: "Faktura duplikována",
         description: `Kopie dokladu je připravená v editoru jako ${nextNumber}.`,
       })
@@ -1059,91 +1110,165 @@ function App() {
     </>
   ) : null
 
+  const reminderHref = buildReminderMailtoHrefForDraft(draft)
+
   const editorActions = user ? (
     <>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => setView("dashboard")}
-          >
-            <LayoutDashboardIcon />
+      {/* Mobile + tablet: compact — save/PDF live in the bottom action bar */}
+      <div className="flex items-center gap-1.5 lg:hidden">
+        <Button
+          variant="outline"
+          size="icon"
+          aria-label="Přehled faktur"
+          onClick={() => setView("dashboard")}
+        >
+          <LayoutDashboardIcon />
+        </Button>
+        <Button
+          variant="outline"
+          size="icon"
+          aria-label={previewVisible ? "Skrýt náhled" : "Zobrazit náhled"}
+          onClick={() => setPreviewVisible((current) => !current)}
+        >
+          {previewVisible ? <EyeOffIcon /> : <EyeIcon />}
+        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="icon" aria-label="Další akce">
+              <EllipsisIcon />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuItem onClick={handleNewInvoice}>
+              <PlusCircleIcon />
+              Nová faktura
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={handleSaveInvoice}
+              disabled={syncing || !authReady}
+            >
+              <SaveIcon />
+              {syncing ? "Ukládám…" : "Uložit"}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={handleMarkCurrentSent}
+              disabled={syncing || !authReady}
+            >
+              <SendIcon />
+              Označit jako odesláno
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleExportInvoice} disabled={syncing}>
+              <PrinterIcon />
+              Export / PDF
+            </DropdownMenuItem>
+            {reminderHref ? (
+              <DropdownMenuItem asChild>
+                <a href={reminderHref}>
+                  <MailIcon />
+                  E-mail
+                </a>
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem disabled>
+                <MailIcon />
+                E-mail
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={resetDraft}>
+              <RotateCcwIcon />
+              Reset faktury
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleSignOut}>
+              <LogOutIcon />
+              Odhlásit
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+      {/* Desktop: full toolbar */}
+      <div className="hidden flex-wrap items-center justify-end gap-2 lg:flex">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setView("dashboard")}
+            >
+              <LayoutDashboardIcon />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Přehled faktur</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="outline" size="icon" onClick={handleNewInvoice}>
+              <PlusCircleIcon />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Nová faktura</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setPreviewVisible((current) => !current)}
+            >
+              {previewVisible ? <EyeOffIcon /> : <EyeIcon />}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            {previewVisible ? "Skrýt náhled" : "Zobrazit náhled"}
+          </TooltipContent>
+        </Tooltip>
+        <Button onClick={handleSaveInvoice} disabled={syncing || !authReady}>
+          <SaveIcon data-icon="inline-start" />
+          {syncing ? "Ukládám…" : "Uložit"}
+        </Button>
+        <Button
+          variant="outline"
+          onClick={handleMarkCurrentSent}
+          disabled={syncing || !authReady}
+          aria-label="Označit jako odesláno"
+        >
+          <SendIcon data-icon="inline-start" />
+          Odesláno
+        </Button>
+        <Button onClick={handleExportInvoice} disabled={syncing}>
+          <PrinterIcon data-icon="inline-start" />
+          Export / PDF
+        </Button>
+        {reminderHref ? (
+          <Button variant="outline" asChild>
+            <a href={reminderHref}>
+              <MailIcon data-icon="inline-start" />
+              E-mail
+            </a>
           </Button>
-        </TooltipTrigger>
-        <TooltipContent>Přehled faktur</TooltipContent>
-      </Tooltip>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button variant="outline" size="icon" onClick={handleNewInvoice}>
-            <PlusCircleIcon />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>Nová faktura</TooltipContent>
-      </Tooltip>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => setPreviewVisible((current) => !current)}
-          >
-            {previewVisible ? <EyeOffIcon /> : <EyeIcon />}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>
-          {previewVisible ? "Skrýt náhled" : "Zobrazit náhled"}
-        </TooltipContent>
-      </Tooltip>
-      <Button onClick={handleSaveInvoice} disabled={syncing || !authReady}>
-        <SaveIcon data-icon="inline-start" />
-        {syncing ? "Ukládám…" : "Uložit"}
-      </Button>
-      <Button
-        variant="outline"
-        onClick={handleMarkCurrentSent}
-        disabled={syncing || !authReady}
-        aria-label="Označit jako odesláno"
-      >
-        <SendIcon data-icon="inline-start" />
-        <span className="hidden sm:inline">Odesláno</span>
-      </Button>
-      <Button onClick={handleExportInvoice} disabled={syncing}>
-        <PrinterIcon data-icon="inline-start" />
-        <span className="hidden sm:inline">Export / PDF</span>
-        <span className="sm:hidden">PDF</span>
-      </Button>
-      {buildReminderMailtoHrefForDraft(draft) ? (
-        <Button variant="outline" asChild>
-          <a href={buildReminderMailtoHrefForDraft(draft)!}>
+        ) : (
+          <Button variant="outline" disabled>
             <MailIcon data-icon="inline-start" />
-            <span className="hidden sm:inline">E-mail</span>
-            <span className="sm:hidden">Mail</span>
-          </a>
-        </Button>
-      ) : (
-        <Button variant="outline" disabled>
-          <MailIcon data-icon="inline-start" />
-          <span className="hidden sm:inline">E-mail</span>
-          <span className="sm:hidden">Mail</span>
-        </Button>
-      )}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button variant="outline" size="icon" onClick={resetDraft}>
-            <RotateCcwIcon />
+            E-mail
           </Button>
-        </TooltipTrigger>
-        <TooltipContent>Reset faktury</TooltipContent>
-      </Tooltip>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button variant="outline" size="icon" onClick={handleSignOut}>
-            <LogOutIcon />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>Odhlásit</TooltipContent>
-      </Tooltip>
+        )}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="outline" size="icon" onClick={resetDraft}>
+              <RotateCcwIcon />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Reset faktury</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="outline" size="icon" onClick={handleSignOut}>
+              <LogOutIcon />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Odhlásit</TooltipContent>
+        </Tooltip>
+      </div>
     </>
   ) : null
 
@@ -1168,7 +1293,6 @@ function App() {
     return (
       <AppShell>
         <main className="mx-auto flex min-h-[calc(100svh-88px)] max-w-lg flex-col justify-center gap-4 p-4">
-          {message ? <MessageAlert message={message} /> : null}
           <AuthCard
             email={authEmail}
             isLoading={authLoading}
@@ -1187,7 +1311,6 @@ function App() {
     return (
       <AppShell actions={dashboardActions} userEmail={user.email}>
         <main className="mx-auto flex max-w-[1500px] flex-col gap-4 p-4 md:gap-5 md:p-6">
-          {message ? <MessageAlert message={message} /> : null}
           <InvoiceStatsCard invoices={savedInvoices} />
           <InvoiceFollowUpCard
             invoices={savedInvoices}
@@ -1265,13 +1388,6 @@ function App() {
             </CardAction>
           </CardHeader>
           <CardContent className="flex flex-col gap-5">
-            {message ? (
-              <Alert variant={message.variant}>
-                <AlertTitle>{message.title}</AlertTitle>
-                <AlertDescription>{message.description}</AlertDescription>
-              </Alert>
-            ) : null}
-
             {showExportIssues && invoiceValidationIssues.length > 0 ? (
               <Alert variant="destructive">
                 <AlertTitle>Před exportem oprav tyhle věci</AlertTitle>
@@ -1358,11 +1474,16 @@ function App() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectGroup>
-                        {Object.entries(statusLabels).map(([value, label]) => (
-                          <SelectItem key={value} value={value}>
-                            {label}
-                          </SelectItem>
-                        ))}
+                        {Object.entries(statusLabels)
+                          .filter(
+                            ([value]) =>
+                              value !== "overdue" || draft.status === "overdue"
+                          )
+                          .map(([value, label]) => (
+                            <SelectItem key={value} value={value}>
+                              {label}
+                            </SelectItem>
+                          ))}
                       </SelectGroup>
                     </SelectContent>
                   </Select>
@@ -1426,7 +1547,44 @@ function App() {
 
             <Separator className={cn(!mobileBasicsOpen && "hidden md:block")} />
 
-            <FieldSet className={cn(!mobileBasicsOpen && "hidden md:flex")}>
+            {/* Odběratel je prakticky vždy 3M Energy — detail jen na vyžádání */}
+            <div
+              className={cn(
+                "flex items-center justify-between gap-3 rounded-lg border bg-card p-3",
+                !mobileBasicsOpen && "hidden md:flex"
+              )}
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium">
+                  {draft.customerName || "Bez odběratele"}
+                </p>
+                <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                  {[
+                    draft.customerCompanyId
+                      ? `IČO ${draft.customerCompanyId}`
+                      : null,
+                    draft.contactEmail || null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ") || "Bez IČO a kontaktu"}
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                onClick={() => setCustomerDetailsOpen((open) => !open)}
+              >
+                {customerDetailsOpen ? "Skrýt" : "Změnit"}
+              </Button>
+            </div>
+
+            <FieldSet
+              className={cn(
+                !customerDetailsOpen && "hidden",
+                customerDetailsOpen && !mobileBasicsOpen && "hidden md:flex"
+              )}
+            >
               <FieldGroup className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
                 <Field>
                   <FieldLabel htmlFor="customer-name">Odběratel</FieldLabel>
@@ -1739,7 +1897,7 @@ function InvoiceLinesEditor({
         ) : null}
 
         {lines.length > 0 ? (
-          <ul className="flex flex-col gap-1.5 md:hidden">
+          <ul className="flex flex-col gap-2 lg:hidden">
             {lines.map((line) => {
               const matchedItem = priceList.find(
                 (item) =>
@@ -1749,64 +1907,129 @@ function InvoiceLinesEditor({
               const color = matchedItem
                 ? categoryColors[matchedItem.category]
                 : undefined
+              const quantityStep = line.unitLabel === "hod" ? 0.5 : 1
 
               return (
                 <li
                   key={line.id}
-                  className={cn(
-                    "flex items-center gap-2 rounded-lg p-2.5",
-                    color ? "" : "border bg-background/45"
-                  )}
+                  className="flex flex-col gap-2 rounded-lg border bg-background/45 p-3"
                   style={
                     color
                       ? {
-                          background: color,
-                          borderColor: `color-mix(in oklch, ${color}, black 20%)`,
+                          borderLeft: `4px solid color-mix(in oklch, ${color}, black 10%)`,
                         }
                       : undefined
                   }
                 >
-                  <div className="min-w-0 flex-1">
-                    <p
-                      className={cn(
-                        "truncate text-sm font-semibold leading-snug",
-                        color ? "text-white" : ""
-                      )}
+                  <div className="flex items-start gap-2">
+                    <Textarea
+                      value={line.description}
+                      placeholder="Popis položky"
+                      rows={2}
+                      className="min-h-9 flex-1 resize-none text-sm"
+                      onChange={(event) =>
+                        onUpdateLine(line.id, {
+                          description: event.target.value,
+                        })
+                      }
+                    />
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="size-8 shrink-0 text-muted-foreground"
+                      aria-label="Odebrat položku"
+                      onClick={() => onRemoveLine(line.id)}
                     >
-                      {line.description || "Bez popisu"}
-                    </p>
-                    <p
-                      className={cn(
-                        "mt-0.5 text-xs",
-                        color ? "text-white/75" : "text-muted-foreground"
+                      <Trash2Icon className="size-4" />
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        className="size-8"
+                        aria-label="Ubrat množství"
+                        onClick={() =>
+                          onUpdateLine(line.id, {
+                            quantity: Math.max(
+                              0,
+                              line.quantity - quantityStep
+                            ),
+                          })
+                        }
+                      >
+                        <MinusIcon className="size-4" />
+                      </Button>
+                      {line.unitLabel === "hod" ? (
+                        <HoursInput
+                          value={line.quantity}
+                          className="w-14 text-center"
+                          onChange={(value) =>
+                            onUpdateLine(line.id, { quantity: value })
+                          }
+                        />
+                      ) : (
+                        <Input
+                          inputMode="decimal"
+                          value={line.quantity}
+                          aria-label="Množství"
+                          className="w-14 text-center"
+                          onChange={(event) =>
+                            onUpdateLine(line.id, {
+                              quantity: normalizeMoneyInput(
+                                event.target.value
+                              ),
+                            })
+                          }
+                        />
                       )}
-                    >
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        className="size-8"
+                        aria-label="Přidat množství"
+                        onClick={() =>
+                          onUpdateLine(line.id, {
+                            quantity: line.quantity + quantityStep,
+                          })
+                        }
+                      >
+                        <PlusIcon className="size-4" />
+                      </Button>
+                    </div>
+                    <Input
+                      value={line.unitLabel}
+                      placeholder="ks"
+                      aria-label="Jednotka"
+                      className="w-14"
+                      onChange={(event) =>
+                        onUpdateLine(line.id, {
+                          unitLabel: event.target.value,
+                        })
+                      }
+                    />
+                    <Input
+                      inputMode="decimal"
+                      value={line.unitPrice}
+                      aria-label="Cena za jednotku"
+                      className="min-w-0 flex-1 text-right"
+                      onChange={(event) =>
+                        onUpdateLine(line.id, {
+                          unitPrice: normalizeMoneyInput(event.target.value),
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>
                       {formatQuantity(line.quantity, line.unitLabel)} ×{" "}
                       {formatCurrency(line.unitPrice)}
-                    </p>
+                    </span>
+                    <span className="text-sm font-bold tabular-nums text-foreground">
+                      {formatCurrency(line.quantity * line.unitPrice)}
+                    </span>
                   </div>
-                  <span
-                    className={cn(
-                      "shrink-0 text-sm font-bold tabular-nums",
-                      color ? "text-white" : ""
-                    )}
-                  >
-                    {formatCurrency(line.quantity * line.unitPrice)}
-                  </span>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className={cn(
-                      "size-8 shrink-0",
-                      color
-                        ? "text-white/80 hover:bg-black/20 hover:text-white"
-                        : ""
-                    )}
-                    aria-label="Odebrat položku"
-                    onClick={() => onRemoveLine(line.id)}
-                  >
-                    <Trash2Icon className="size-4" />
-                  </Button>
                 </li>
               )
             })}
@@ -1814,7 +2037,7 @@ function InvoiceLinesEditor({
         ) : null}
 
         {lines.length > 0 ? (
-          <div className="hidden overflow-x-auto rounded-lg border md:block">
+          <div className="hidden overflow-x-auto rounded-lg border lg:block">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -1933,40 +2156,32 @@ function AppShell({
           headerHidden && "-translate-y-full"
         )}
       >
-        <div className="mx-auto flex max-w-[1800px] flex-row items-center justify-between gap-2 px-4 py-2.5 sm:py-4 sm:gap-3">
+        <div className="mx-auto flex max-w-[1800px] items-center justify-between gap-2 px-3 py-2 sm:gap-3 sm:px-4 sm:py-3">
           <div className="min-w-0 shrink">
             <div className="flex items-center gap-2">
-              <h1 className="text-base leading-tight font-semibold sm:text-3xl">
+              <h1 className="truncate text-base leading-tight font-semibold sm:text-2xl">
                 Faktury pro Štěpu
               </h1>
-              <Badge variant="secondary" className="hidden sm:inline-flex">
+              <Badge variant="secondary" className="hidden md:inline-flex">
                 3M ENERGY
               </Badge>
             </div>
             {userEmail ? (
-              <p className="hidden truncate text-xs text-muted-foreground sm:block sm:text-sm">
+              <p className="hidden truncate text-xs text-muted-foreground md:block md:text-sm">
                 {userEmail}
               </p>
             ) : null}
           </div>
           {actions ? (
-            <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto sm:gap-2">
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
               {actions}
             </div>
           ) : null}
         </div>
       </header>
       {children}
+      <Toaster />
     </div>
-  )
-}
-
-function MessageAlert({ message }: { message: AppMessage }) {
-  return (
-    <Alert variant={message.variant}>
-      <AlertTitle>{message.title}</AlertTitle>
-      <AlertDescription>{message.description}</AlertDescription>
-    </Alert>
   )
 }
 
@@ -3284,35 +3499,38 @@ function SavedInvoicesCard({
                         <PencilIcon className="size-4" />
                         Upravit
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-9 flex-1"
-                        onClick={() =>
-                          isDraft
-                            ? onLoad(invoice.id)
-                            : isWaitingForSend
-                              ? onMarkSent(invoice.id)
-                              : onTogglePaid(invoice.id, !isPaid)
-                        }
-                      >
-                        {isDraft ? (
-                          <>
-                            <PencilIcon className="size-4" />
-                            Dokončit
-                          </>
-                        ) : isWaitingForSend ? (
-                          <>
-                            <SendIcon className="size-4" />
-                            Odesláno
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle2Icon className="size-4" />
-                            {isPaid ? "Zaplaceno" : "Zaplatit"}
-                          </>
-                        )}
-                      </Button>
+                      {/* U zaplacené faktury žádná rychlá akce — od-zaplacení je schované v „…“ menu */}
+                      {isPaid ? null : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-9 flex-1"
+                          onClick={() =>
+                            isDraft
+                              ? onLoad(invoice.id)
+                              : isWaitingForSend
+                                ? onMarkSent(invoice.id)
+                                : onTogglePaid(invoice.id, true)
+                          }
+                        >
+                          {isDraft ? (
+                            <>
+                              <PencilIcon className="size-4" />
+                              Dokončit
+                            </>
+                          ) : isWaitingForSend ? (
+                            <>
+                              <SendIcon className="size-4" />
+                              Odesláno
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle2Icon className="size-4" />
+                              Zaplaceno
+                            </>
+                          )}
+                        </Button>
+                      )}
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button
