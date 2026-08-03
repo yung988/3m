@@ -590,3 +590,36 @@
     margin-bottom: 2mm;
   }
 }
+
+/* ── Invoice row status colours ── */
+.invoice-row-draft {
+  background-color: oklch(0.8 0.1 70 / 0.15);
+}
+.invoice-row-issued {
+  background-color: oklch(0.7 0.12 240 / 0.12);
+}
+.invoice-row-paid {
+  background-color: oklch(0.75 0.15 145 / 0.14);
+}
+.invoice-row-overdue {
+  background-color: oklch(0.65 0.2 25 / 0.15);
+}
+.invoice-row-cancelled {
+  background-color: oklch(0.6 0.01 260 / 0.1);
+}
+
+:is(.dark) .invoice-row-draft {
+  background-color: oklch(0.55 0.1 70 / 0.2);
+}
+:is(.dark) .invoice-row-issued {
+  background-color: oklch(0.5 0.1 240 / 0.18);
+}
+:is(.dark) .invoice-row-paid {
+  background-color: oklch(0.5 0.14 145 / 0.2);
+}
+:is(.dark) .invoice-row-overdue {
+  background-color: oklch(0.45 0.17 25 / 0.22);
+}
+:is(.dark) .invoice-row-cancelled {
+  background-color: oklch(0.4 0.01 260 / 0.15);
+}

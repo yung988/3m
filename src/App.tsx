@@ -3073,6 +3073,21 @@ function getInvoiceStatusVariant(
   return statusVariant[invoice.status as InvoiceStatus] ?? "outline"
 }
 
+/** Jemné pozadí řádku podle stavu faktury */
+function getInvoiceRowBgClass(invoice: InvoiceSummary): string {
+  if (isInvoiceOverdue(invoice)) {
+    return "invoice-row-overdue"
+  }
+  const cls: Record<InvoiceStatus, string> = {
+    draft: "invoice-row-draft",
+    issued: "invoice-row-issued",
+    paid: "invoice-row-paid",
+    overdue: "invoice-row-overdue",
+    cancelled: "invoice-row-cancelled",
+  }
+  return cls[invoice.status as InvoiceStatus] ?? ""
+}
+
 function isInvoiceOpenForPayment(invoice: InvoiceSummary) {
   return !["draft", "paid", "cancelled"].includes(invoice.status)
 }
@@ -3441,12 +3456,14 @@ function SavedInvoicesCard({
                 const hasWorkflowAction = isWaitingForSend || canTogglePaid
                 const statusLabel = getInvoiceStatusLabel(invoice)
                 const statusBadgeVariant = getInvoiceStatusVariant(invoice)
+                const rowBgClass = getInvoiceRowBgClass(invoice)
                 return (
                   <li
                     key={invoice.id}
                     className={cn(
-                      "rounded-xl border bg-background/45 shadow-sm",
-                      isActive && "border-primary/45 bg-primary/10"
+                      "rounded-xl border shadow-sm",
+                      rowBgClass,
+                      isActive && "border-primary/45 !bg-primary/10"
                     )}
                   >
                     <button
@@ -3676,11 +3693,16 @@ function SavedInvoicesCard({
                     const hasWorkflowAction = isWaitingForSend || canTogglePaid
                     const statusLabel = getInvoiceStatusLabel(invoice)
                     const statusBadgeVariant = getInvoiceStatusVariant(invoice)
+                    const rowBgClass = getInvoiceRowBgClass(invoice)
                     return (
                       <ContextMenu key={invoice.id}>
                         <ContextMenuTrigger asChild>
                           <TableRow
-                            className="cursor-pointer hover:bg-muted/45 data-[active=true]:bg-primary/10"
+                            className={cn(
+                              "cursor-pointer hover:brightness-95 dark:hover:brightness-110",
+                              rowBgClass,
+                              activeInvoiceId === invoice.id && "!bg-primary/10"
+                            )}
                             data-active={activeInvoiceId === invoice.id}
                             onClick={() => onLoad(invoice.id)}
                           >
