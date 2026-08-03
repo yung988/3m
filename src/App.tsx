@@ -1,6 +1,5 @@
 import {
   type ChangeEvent,
-  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -16,10 +15,8 @@ import {
   ArrowUpDownIcon,
   BanknoteIcon,
   CheckCircle2Icon,
-  CircleDollarSignIcon,
   ClipboardCopyIcon,
   Clock3Icon,
-  CloudIcon,
   CopyIcon,
   EllipsisIcon,
   EyeIcon,
@@ -73,14 +70,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import {
-  Drawer,
-  DrawerContent,
-  DrawerDescription,
-  DrawerHeader,
-  DrawerTitle,
-  DrawerTrigger,
-} from "@/components/ui/drawer"
 import { Field, FieldGroup, FieldLabel, FieldSet } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import {
@@ -101,7 +90,6 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
-import { Toaster } from "@/components/ui/sonner"
 import {
   Tooltip,
   TooltipContent,
@@ -159,23 +147,7 @@ import {
 } from "@/lib/invoice-repository"
 import { missingSupabaseEnv, supabase } from "@/lib/supabase"
 
-function useScrollHide() {
-  const [hidden, setHidden] = useState(false)
-  const lastY = useRef(0)
 
-  useEffect(() => {
-    function onScroll() {
-      const y = window.scrollY
-      if (Math.abs(y - lastY.current) < 8) return
-      setHidden(y > lastY.current && y > 56)
-      lastY.current = y
-    }
-    window.addEventListener("scroll", onScroll, { passive: true })
-    return () => window.removeEventListener("scroll", onScroll)
-  }, [])
-
-  return hidden
-}
 
 const STORAGE_KEY = "faktury-pro-stepu:draft:v2"
 const FOLLOW_UP_SOON_DAYS = 7
@@ -2232,55 +2204,6 @@ function InvoiceLinesEditor({
     </>
   )
 }
-
-function AppShell({
-  actions,
-  children,
-  userEmail,
-}: {
-  actions?: ReactNode
-  children: ReactNode
-  userEmail?: string
-}) {
-  const headerHidden = useScrollHide()
-
-  return (
-    <div className="app-cockpit min-h-svh text-foreground">
-      <header
-        className={cn(
-          "no-print sticky top-0 z-30 border-b bg-background/82 backdrop-blur-xl transition-transform duration-200",
-          headerHidden && "-translate-y-full"
-        )}
-      >
-        <div className="mx-auto flex max-w-[1800px] items-center justify-between gap-2 px-3 py-2 sm:gap-3 sm:px-4 sm:py-3">
-          <div className="min-w-0 shrink">
-            <div className="flex items-center gap-2">
-              <h1 className="truncate text-base leading-tight font-semibold sm:text-2xl">
-                Faktury pro Štěpu
-              </h1>
-              <Badge variant="secondary" className="hidden md:inline-flex">
-                3M ENERGY
-              </Badge>
-            </div>
-            {userEmail ? (
-              <p className="hidden truncate text-xs text-muted-foreground md:block md:text-sm">
-                {userEmail}
-              </p>
-            ) : null}
-          </div>
-          {actions ? (
-            <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
-              {actions}
-            </div>
-          ) : null}
-        </div>
-      </header>
-      {children}
-      <Toaster />
-    </div>
-  )
-}
-
 function AuthCard({
   email,
   isLoading,
@@ -2355,7 +2278,6 @@ function AuthCard({
             </Field>
           </FieldGroup>
           <Button type="submit" disabled={isLoading || hasMissingEnv}>
-            <CloudIcon data-icon="inline-start" />
             Přihlásit
           </Button>
         </form>
@@ -2364,78 +2286,7 @@ function AuthCard({
   )
 }
 
-function InvoiceStatsCard({ invoices }: { invoices: InvoiceSummary[] }) {
-  const stats = useMemo(() => createInvoiceStats(invoices), [invoices])
 
-  return (
-    <Card className="app-panel">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <CircleDollarSignIcon data-icon="inline-start" />
-          Přehled
-        </CardTitle>
-        <CardDescription>Rychlý stav uložených faktur.</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
-          <StatTile
-            label="Doma"
-            tone="success"
-            value={formatCurrency(stats.paidTotal)}
-            detail={`${formatInvoiceCount(stats.paidCount)} zaplaceno`}
-          />
-          <StatTile
-            label="Po splatnosti"
-            tone="danger"
-            value={formatCurrency(stats.overdueTotal)}
-            detail={formatInvoiceCount(stats.overdueCount)}
-          />
-          <StatTile
-            label="Připravit / odeslat"
-            tone="info"
-            value={formatCurrency(stats.waitingSendTotal)}
-            detail={formatInvoiceCount(stats.waitingSendCount)}
-          />
-          <StatTile
-            label="Čeká na platbu"
-            tone="primary"
-            value={formatCurrency(stats.waitingPaymentTotal)}
-            detail={formatInvoiceCount(stats.waitingPaymentCount)}
-          />
-          <StatTile
-            label="Tento měsíc"
-            tone="accent"
-            value={formatCurrency(stats.thisMonthTotal)}
-            detail={formatInvoiceCount(stats.thisMonthCount)}
-          />
-          <StatTile
-            label="Letos"
-            tone="warning"
-            value={formatCurrency(stats.thisYearTotal)}
-            detail={formatInvoiceCount(stats.thisYearCount)}
-          />
-        </div>
-
-        <Separator />
-
-        <div className="flex flex-wrap gap-2">
-          <Badge variant="secondary">
-            {formatInvoiceCount(invoices.length)} celkem
-          </Badge>
-          <Badge variant="outline">
-            {formatInvoiceCount(stats.cancelledCount)} storno
-          </Badge>
-          <Badge variant="outline">
-            {formatCurrency(stats.activeTotal)} aktivně v oběhu
-          </Badge>
-          <Badge variant="outline">
-            {formatCurrency(stats.unpaidTotal)} nezaplaceno
-          </Badge>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
 
 function InvoiceFollowUpCard({
   invoices,
@@ -3091,39 +2942,7 @@ function getBankInboxBadgeVariant(
   }
 }
 
-function StatTile({
-  detail,
-  label,
-  tone = "primary",
-  value,
-}: {
-  detail: string
-  label: string
-  tone?: "accent" | "danger" | "info" | "primary" | "success" | "warning"
-  value: string
-}) {
-  const toneClass = {
-    accent: "app-tone-accent",
-    danger: "app-tone-danger",
-    info: "app-tone-info",
-    primary: "app-tone-primary",
-    success: "app-tone-success",
-    warning: "app-tone-warning",
-  }[tone]
 
-  return (
-    <div className="rounded-xl border bg-background/45 p-3 sm:p-4">
-      <div className="flex items-center gap-2">
-        <span className={cn("size-2.5 shrink-0 rounded-full sm:size-3", toneClass)} />
-        <p className="text-xs font-medium text-muted-foreground sm:text-sm">{label}</p>
-      </div>
-      <p className="mt-2 text-xl leading-tight font-semibold tabular-nums sm:mt-5 sm:text-2xl md:text-3xl">
-        {value}
-      </p>
-      <p className="mt-0.5 text-xs text-muted-foreground">{detail}</p>
-    </div>
-  )
-}
 
 type SortKey =
   | "invoice_number"
@@ -3983,93 +3802,7 @@ function InvoicePreviewOverlay({
   )
 }
 
-function MobileEditorActionBar({
-  authReady,
-  isSyncing,
-  lines,
-  onAddCustomLine,
-  onExport,
-  onRemoveLine,
-  onSave,
-  onUpdateLine,
-  total,
-}: {
-  authReady: boolean
-  isSyncing: boolean
-  lines: InvoiceLine[]
-  onAddCustomLine: () => void
-  onExport: () => void
-  onRemoveLine: (id: string) => void
-  onSave: () => void
-  onUpdateLine: (id: string, changes: Partial<InvoiceLine>) => void
-  total: number
-}) {
-  return (
-    <div
-      className="no-print fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 px-4 pt-3 shadow-[0_-12px_30px_oklch(0.18_0.012_95_/_12%)] backdrop-blur lg:hidden"
-      style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}
-    >
-      <div className="mx-auto flex max-w-[1400px] items-center gap-2">
-        <Button
-          asChild
-          size="icon-lg"
-          variant="outline"
-          aria-label="Přejít na ceník"
-        >
-          <a href="#cenik-sekce">
-            <ShoppingCartIcon data-icon="inline-start" />
-          </a>
-        </Button>
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-medium text-muted-foreground">
-            {lines.length} položek · K úhradě
-          </p>
-          <p className="truncate text-base font-semibold tabular-nums">
-            {formatCurrency(total)}
-          </p>
-        </div>
-        <Drawer>
-          <DrawerTrigger asChild>
-            <Button size="lg" variant="outline">
-              <ShoppingCartIcon data-icon="inline-start" />
-              Položky
-            </Button>
-          </DrawerTrigger>
-          <DrawerContent className="max-h-[82svh]">
-            <DrawerHeader>
-              <DrawerTitle>Položky faktury</DrawerTitle>
-              <DrawerDescription>
-                Přehled a úprava všeho, co je právě přidané na fakturu.
-              </DrawerDescription>
-            </DrawerHeader>
-            <div className="overflow-y-auto pb-4">
-              <InvoiceLinesEditor
-                lines={lines}
-                total={total}
-                onAddCustomLine={onAddCustomLine}
-                onRemoveLine={onRemoveLine}
-                onUpdateLine={onUpdateLine}
-              />
-            </div>
-          </DrawerContent>
-        </Drawer>
-        <Button
-          size="icon-lg"
-          variant="outline"
-          disabled={isSyncing || !authReady}
-          aria-label="Uložit fakturu"
-          onClick={onSave}
-        >
-          <SaveIcon />
-        </Button>
-        <Button size="lg" disabled={isSyncing} onClick={onExport}>
-          <PrinterIcon data-icon="inline-start" />
-          PDF
-        </Button>
-      </div>
-    </div>
-  )
-}
+
 
 function InvoiceDocument({
   draft,
@@ -4241,79 +3974,7 @@ function printInvoicePdf(draft: InvoiceDraft) {
   window.setTimeout(restoreTitle, 3000)
 }
 
-function createInvoiceStats(invoices: InvoiceSummary[]) {
-  const now = new Date()
-  const currentYear = String(now.getFullYear())
-  const currentMonth = `${currentYear}-${String(now.getMonth() + 1).padStart(2, "0")}`
 
-  return invoices.reduce(
-    (stats, invoice) => {
-      const amount = Number(invoice.total_amount) || 0
-      const isCancelled = invoice.status === "cancelled"
-      const isPaid = invoice.status === "paid"
-      const isDraft = invoice.status === "draft"
-
-      if (isCancelled) {
-        stats.cancelledCount += 1
-        return stats
-      }
-
-      if (isDraft) {
-        stats.waitingSendCount += 1
-        stats.waitingSendTotal += amount
-        return stats
-      }
-
-      if (isPaid) {
-        stats.paidCount += 1
-        stats.paidTotal += amount
-      } else {
-        stats.unpaidCount += 1
-        stats.unpaidTotal += amount
-        stats.activeTotal += amount
-
-        if (isInvoiceOverdue(invoice)) {
-          stats.overdueCount += 1
-          stats.overdueTotal += amount
-        }
-
-        stats.waitingPaymentCount += 1
-        stats.waitingPaymentTotal += amount
-      }
-
-      // Příjmy podle období (paid + issued, bez draft/cancelled)
-      const issueDate = invoice.issue_date ?? ""
-      if (issueDate.startsWith(currentMonth)) {
-        stats.thisMonthCount += 1
-        stats.thisMonthTotal += amount
-      }
-      if (issueDate.startsWith(currentYear)) {
-        stats.thisYearCount += 1
-        stats.thisYearTotal += amount
-      }
-
-      return stats
-    },
-    {
-      activeTotal: 0,
-      cancelledCount: 0,
-      overdueCount: 0,
-      overdueTotal: 0,
-      paidCount: 0,
-      paidTotal: 0,
-      thisMonthCount: 0,
-      thisMonthTotal: 0,
-      thisYearCount: 0,
-      thisYearTotal: 0,
-      unpaidCount: 0,
-      unpaidTotal: 0,
-      waitingPaymentCount: 0,
-      waitingPaymentTotal: 0,
-      waitingSendCount: 0,
-      waitingSendTotal: 0,
-    }
-  )
-}
 
 function getInvoiceFollowUpItems(
   invoices: InvoiceSummary[]

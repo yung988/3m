@@ -1,6 +1,6 @@
 import { useMemo } from "react"
 import type { InvoiceSummary } from "@/lib/invoice-repository"
-import { formatCurrency, formatDate } from "@/lib/invoice"
+import { formatCurrency } from "@/lib/invoice"
 import {
   TrendingUpIcon,
   AlertTriangleIcon,

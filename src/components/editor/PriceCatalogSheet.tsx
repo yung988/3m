@@ -49,8 +49,8 @@ export function PriceCatalogSheet({
   }, [searchQuery, selectedCategory])
 
   const getItemQuantity = (item: PriceItem) => {
-    // We match by item name as that's how it's translated to invoice lines
-    const line = lines.find((l) => l.name === item.name)
+    // We match by item description as that's how it's stored in invoice lines
+    const line = lines.find((l) => l.description === item.name)
     return line ? line.quantity : 0
   }
 
@@ -159,7 +159,7 @@ export function PriceCatalogSheet({
                       <p className="text-sm text-muted-foreground mt-1 flex gap-1 items-center">
                         <span className="font-semibold text-foreground">{formatCurrency(item.price)}</span>
                         <span className="opacity-50">/</span>
-                        <span>{item.unit}</span>
+                        <span>{item.sourceUnit}</span>
                       </p>
                     </div>
                   </div>
@@ -176,7 +176,7 @@ export function PriceCatalogSheet({
                           <Minus className="h-5 w-5" />
                         </Button>
                         <span className="flex-1 text-center font-bold text-lg tabular-nums tracking-tight">
-                          {formatQuantity(quantity)}
+                          {formatQuantity(quantity, item.billingUnit)}
                         </span>
                         <Button 
                           variant="ghost" 

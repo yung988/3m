@@ -8,6 +8,8 @@ type InvoiceCardProps = {
   onTap: (id: string) => void
   onMarkPaid?: (id: string) => void
   onDelete?: (id: string) => void
+  onDuplicate?: (id: string) => void
+  onMarkSent?: (id: string) => void
 }
 
 const statusConfig: Record<string, { label: string; color: string }> = {

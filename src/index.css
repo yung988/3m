@@ -623,3 +623,18 @@
 :is(.dark) .invoice-row-cancelled {
   background-color: oklch(0.4 0.01 260 / 0.15);
 }
+
+/* ── Mobile Polish Utilities ── */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Smooth spring tap animation */
+button, [role="button"] {
+  -webkit-tap-highlight-color: transparent;
+}
+
