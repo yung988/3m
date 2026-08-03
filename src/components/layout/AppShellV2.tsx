@@ -61,7 +61,7 @@ export function AppShellV2({
       {/* Scrollable content – padded for bottom tab bar on mobile */}
       <main
         className={cn(
-          "flex-1 pb-20 lg:pb-0",
+          "flex-1 pb-[calc(env(safe-area-inset-bottom)+4rem)] lg:pb-0",
           className
         )}
       >

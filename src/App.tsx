@@ -103,6 +103,7 @@ import {
 import { cn } from "@/lib/utils"
 import { AppShellV2 } from "@/components/layout/AppShellV2"
 import type { AppView } from "@/components/layout/AppShellV2"
+import { StandaloneScreen } from "@/components/layout/StandaloneScreen"
 import { InvoiceList } from "@/components/invoices/InvoiceList"
 import { PriceCatalogSheet } from "@/components/editor/PriceCatalogSheet"
 import { InvoiceSummaryBar } from "@/components/editor/InvoiceSummaryBar"
@@ -1251,44 +1252,32 @@ function App() {
 
   if (!authReady) {
     return (
-      <AppShellV2
-        activeView={"invoices" as AppView}
-        onViewChange={() => {}}
-        title="Načítám…"
-      >
-        <div className="mx-auto flex min-h-[calc(100svh-88px)] max-w-lg flex-col justify-center p-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Načítám přihlášení</CardTitle>
-              <CardDescription>
-                Kontroluji relaci Supabase v prohlížeči.
-              </CardDescription>
-            </CardHeader>
-          </Card>
-        </div>
-      </AppShellV2>
+      <StandaloneScreen title="Načítám…">
+        <Card>
+          <CardHeader>
+            <CardTitle>Načítám přihlášení</CardTitle>
+            <CardDescription>
+              Kontroluji relaci Supabase v prohlížeči.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      </StandaloneScreen>
     )
   }
 
   if (!user) {
     return (
-      <AppShellV2
-        activeView={"invoices" as AppView}
-        onViewChange={() => {}}
-        title="Přihlášení"
-      >
-        <div className="mx-auto flex min-h-[calc(100svh-88px)] max-w-lg flex-col justify-center gap-4 p-4">
-          <AuthCard
-            email={authEmail}
-            isLoading={authLoading}
-            missingEnv={missingSupabaseEnv}
-            onEmailChange={setAuthEmail}
-            onPasswordChange={setAuthPassword}
-            onSubmit={handleAuth}
-            password={authPassword}
-          />
-        </div>
-      </AppShellV2>
+      <StandaloneScreen title="Přihlášení">
+        <AuthCard
+          email={authEmail}
+          isLoading={authLoading}
+          missingEnv={missingSupabaseEnv}
+          onEmailChange={setAuthEmail}
+          onPasswordChange={setAuthPassword}
+          onSubmit={handleAuth}
+          password={authPassword}
+        />
+      </StandaloneScreen>
     )
   }
 
@@ -2254,6 +2243,7 @@ function AuthCard({
               <FieldLabel htmlFor="auth-email">E-mail</FieldLabel>
               <Input
                 id="auth-email"
+                className="h-11"
                 autoComplete="email"
                 inputMode="email"
                 required
@@ -2267,6 +2257,7 @@ function AuthCard({
               <FieldLabel htmlFor="auth-password">Heslo</FieldLabel>
               <Input
                 id="auth-password"
+                className="h-11"
                 autoComplete="current-password"
                 minLength={6}
                 required
@@ -2277,7 +2268,11 @@ function AuthCard({
               />
             </Field>
           </FieldGroup>
-          <Button type="submit" disabled={isLoading || hasMissingEnv}>
+          <Button
+            type="submit"
+            className="h-11"
+            disabled={isLoading || hasMissingEnv}
+          >
             Přihlásit
           </Button>
         </form>

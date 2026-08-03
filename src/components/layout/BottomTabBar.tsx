@@ -44,7 +44,7 @@ export function BottomTabBar({
   ]
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 flex border-t bg-background/80 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 flex border-t bg-background/80 pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] pb-[max(env(safe-area-inset-bottom),0.25rem)] backdrop-blur-xl lg:hidden">
       {tabs.map((tab) => {
         const isActive = activeView === tab.id
         const Icon = tab.icon
