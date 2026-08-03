@@ -118,6 +118,7 @@ import type { AppView } from "@/components/layout/AppShellV2"
 import { InvoiceList } from "@/components/invoices/InvoiceList"
 import { PriceCatalogSheet } from "@/components/editor/PriceCatalogSheet"
 import { InvoiceSummaryBar } from "@/components/editor/InvoiceSummaryBar"
+import { StatsGrid } from "@/components/dashboard/StatsGrid"
 import {
   assertInvoiceDraftInvariant,
   buildPaymentQrString,
@@ -1342,7 +1343,7 @@ function App() {
         headerRight={dashboardActions}
       >
         <div className="mx-auto flex max-w-[1500px] flex-col gap-4 p-4 md:gap-5 md:p-6">
-          <InvoiceStatsCard invoices={savedInvoices} />
+          <StatsGrid invoices={savedInvoices} />
           <InvoiceFollowUpCard
             invoices={savedInvoices}
             isLoading={savedInvoicesLoading}
