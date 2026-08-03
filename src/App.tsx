@@ -115,6 +115,7 @@ import {
 import { cn } from "@/lib/utils"
 import { AppShellV2 } from "@/components/layout/AppShellV2"
 import type { AppView } from "@/components/layout/AppShellV2"
+import { InvoiceList } from "@/components/invoices/InvoiceList"
 import {
   assertInvoiceDraftInvariant,
   buildPaymentQrString,
@@ -1363,20 +1364,40 @@ function App() {
         subtitle={`${savedInvoices.length} faktur`}
         headerRight={dashboardActions}
       >
-        <div className="mx-auto flex max-w-[1500px] flex-col gap-4 p-4 md:gap-5 md:p-6">
-          <SavedInvoicesCard
-            activeInvoiceId={draft.id}
-            invoices={savedInvoices}
-            isLoading={savedInvoicesLoading}
-            onDelete={handleDeleteInvoice}
-            onDuplicate={handleDuplicateInvoice}
-            onLoad={(id) => {
-              handleLoadInvoice(id)
-              setView("editor")
-            }}
-            onMarkSent={handleMarkSent}
-            onTogglePaid={handleTogglePaid}
-          />
+        <div className="mx-auto max-w-[1500px]">
+          {/* Mobile Apple-like Invoice List */}
+          <div className="md:hidden">
+            <InvoiceList
+              activeInvoiceId={draft.id}
+              invoices={savedInvoices}
+              isLoading={savedInvoicesLoading}
+              onDelete={handleDeleteInvoice}
+              onDuplicate={handleDuplicateInvoice}
+              onLoad={(id) => {
+                handleLoadInvoice(id)
+                setView("editor")
+              }}
+              onMarkSent={handleMarkSent}
+              onTogglePaid={handleTogglePaid}
+            />
+          </div>
+
+          {/* Desktop Table View */}
+          <div className="hidden p-4 md:block md:p-6">
+            <SavedInvoicesCard
+              activeInvoiceId={draft.id}
+              invoices={savedInvoices}
+              isLoading={savedInvoicesLoading}
+              onDelete={handleDeleteInvoice}
+              onDuplicate={handleDuplicateInvoice}
+              onLoad={(id) => {
+                handleLoadInvoice(id)
+                setView("editor")
+              }}
+              onMarkSent={handleMarkSent}
+              onTogglePaid={handleTogglePaid}
+            />
+          </div>
         </div>
       </AppShellV2>
     )
