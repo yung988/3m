@@ -113,6 +113,8 @@ import {
   type ParsedAirBankTransaction,
 } from "@/lib/airbank-xml"
 import { cn } from "@/lib/utils"
+import { AppShellV2 } from "@/components/layout/AppShellV2"
+import type { AppView } from "@/components/layout/AppShellV2"
 import {
   assertInvoiceDraftInvariant,
   buildPaymentQrString,
@@ -188,7 +190,6 @@ type AppMessage = {
   variant?: "default" | "destructive"
 }
 
-type AppView = "dashboard" | "editor"
 
 type FilteredPriceItem = {
   item: PriceItem
@@ -357,7 +358,7 @@ function App() {
   const [bankImportPreview, setBankImportPreview] =
     useState<BankImportPreview | null>(null)
   const [syncing, setSyncing] = useState(false)
-  const [view, setView] = useState<AppView>("dashboard")
+  const [view, setView] = useState<AppView>("invoices")
   const [previewVisible, setPreviewVisible] = useState(false)
   const [showExportIssues, setShowExportIssues] = useState(false)
   const [mobileBasicsOpen, setMobileBasicsOpen] = useState(false)
@@ -1274,8 +1275,12 @@ function App() {
 
   if (!authReady) {
     return (
-      <AppShell>
-        <main className="mx-auto flex min-h-[calc(100svh-88px)] max-w-lg flex-col justify-center p-4">
+      <AppShellV2
+        activeView={"invoices" as AppView}
+        onViewChange={() => {}}
+        title="Načítám…"
+      >
+        <div className="mx-auto flex min-h-[calc(100svh-88px)] max-w-lg flex-col justify-center p-4">
           <Card>
             <CardHeader>
               <CardTitle>Načítám přihlášení</CardTitle>
@@ -1284,15 +1289,19 @@ function App() {
               </CardDescription>
             </CardHeader>
           </Card>
-        </main>
-      </AppShell>
+        </div>
+      </AppShellV2>
     )
   }
 
   if (!user) {
     return (
-      <AppShell>
-        <main className="mx-auto flex min-h-[calc(100svh-88px)] max-w-lg flex-col justify-center gap-4 p-4">
+      <AppShellV2
+        activeView={"invoices" as AppView}
+        onViewChange={() => {}}
+        title="Přihlášení"
+      >
+        <div className="mx-auto flex min-h-[calc(100svh-88px)] max-w-lg flex-col justify-center gap-4 p-4">
           <AuthCard
             email={authEmail}
             isLoading={authLoading}
@@ -1302,24 +1311,85 @@ function App() {
             onSubmit={handleAuth}
             password={authPassword}
           />
-        </main>
-      </AppShell>
+        </div>
+      </AppShellV2>
     )
+  }
+
+  const viewTitle: Record<AppView, string> = {
+    dashboard: "Přehled",
+    invoices: "Faktury",
+    editor: draft.invoiceNumber || "Editor",
+    bank: "Banka",
+  }
+
+  const commonShellProps = {
+    activeView: view,
+    onViewChange: (v: AppView) => setView(v),
+    invoiceNumber: draft.invoiceNumber,
+    hasUnsavedChanges: isDraftDirty(),
+    title: viewTitle[view],
   }
 
   if (view === "dashboard") {
     return (
-      <AppShell actions={dashboardActions} userEmail={user.email}>
-        <main className="mx-auto flex max-w-[1500px] flex-col gap-4 p-4 md:gap-5 md:p-6">
+      <AppShellV2
+        {...commonShellProps}
+        subtitle={user.email}
+        headerRight={dashboardActions}
+      >
+        <div className="mx-auto flex max-w-[1500px] flex-col gap-4 p-4 md:gap-5 md:p-6">
           <InvoiceStatsCard invoices={savedInvoices} />
           <InvoiceFollowUpCard
             invoices={savedInvoices}
             isLoading={savedInvoicesLoading}
             isSyncing={syncing}
             onCopyReminder={handleCopyReminder}
-            onLoad={handleLoadInvoice}
+            onLoad={(id) => {
+              handleLoadInvoice(id)
+              setView("editor")
+            }}
             onTogglePaid={handleTogglePaid}
           />
+        </div>
+      </AppShellV2>
+    )
+  }
+
+  if (view === "invoices") {
+    return (
+      <AppShellV2
+        {...commonShellProps}
+        subtitle={`${savedInvoices.length} faktur`}
+        headerRight={dashboardActions}
+      >
+        <div className="mx-auto flex max-w-[1500px] flex-col gap-4 p-4 md:gap-5 md:p-6">
+          <SavedInvoicesCard
+            activeInvoiceId={draft.id}
+            invoices={savedInvoices}
+            isLoading={savedInvoicesLoading}
+            onDelete={handleDeleteInvoice}
+            onDuplicate={handleDuplicateInvoice}
+            onLoad={(id) => {
+              handleLoadInvoice(id)
+              setView("editor")
+            }}
+            onMarkSent={handleMarkSent}
+            onTogglePaid={handleTogglePaid}
+          />
+        </div>
+      </AppShellV2>
+    )
+  }
+
+  if (view === "bank") {
+    return (
+      <AppShellV2
+        {...commonShellProps}
+        subtitle={user.email}
+        headerRight={dashboardActions}
+      >
+        <div className="mx-auto flex max-w-[1500px] flex-col gap-4 p-4 md:gap-5 md:p-6">
           <BankTransactionsCard
             importPreview={bankImportPreview}
             imports={bankTransactions}
@@ -1331,27 +1401,25 @@ function App() {
             onConfirmImport={handleConfirmBankImport}
             onImportXml={handlePreviewBankXml}
             onLinkTransaction={handleLinkTransaction}
-            onLoadInvoice={handleLoadInvoice}
+            onLoadInvoice={(id) => {
+              handleLoadInvoice(id)
+              setView("editor")
+            }}
             onMarkPaid={(invoiceId) => handleTogglePaid(invoiceId, true)}
           />
-          <SavedInvoicesCard
-            activeInvoiceId={draft.id}
-            invoices={savedInvoices}
-            isLoading={savedInvoicesLoading}
-            onDelete={handleDeleteInvoice}
-            onDuplicate={handleDuplicateInvoice}
-            onLoad={handleLoadInvoice}
-            onMarkSent={handleMarkSent}
-            onTogglePaid={handleTogglePaid}
-          />
-        </main>
-      </AppShell>
+        </div>
+      </AppShellV2>
     )
   }
 
+  // Editor view (default fallback)
   return (
-    <AppShell actions={editorActions} userEmail={user.email}>
-      <main className="mx-auto flex max-w-[1500px] flex-col gap-4 px-4 pt-4 pb-32 lg:pb-6">
+    <AppShellV2
+      {...commonShellProps}
+      subtitle={getDraftPaymentStateText(draft)}
+      headerRight={editorActions}
+    >
+      <div className="mx-auto flex max-w-[1500px] flex-col gap-4 px-4 pt-4 pb-4 lg:pb-6">
         {/* Invoice form — DOM first so mobile shows it before the price list */}
         <Card className="app-panel no-print h-fit overflow-visible">
           <CardHeader>
@@ -1828,7 +1896,7 @@ function App() {
             />
           </Card>
         </div>
-      </main>
+      </div>
       {previewVisible ? (
         <InvoicePreviewOverlay
           draft={draft}
@@ -1851,7 +1919,7 @@ function App() {
         onUpdateLine={updateLine}
         total={total}
       />
-    </AppShell>
+    </AppShellV2>
   )
 }
 
