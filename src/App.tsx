@@ -116,6 +116,8 @@ import { cn } from "@/lib/utils"
 import { AppShellV2 } from "@/components/layout/AppShellV2"
 import type { AppView } from "@/components/layout/AppShellV2"
 import { InvoiceList } from "@/components/invoices/InvoiceList"
+import { PriceCatalogSheet } from "@/components/editor/PriceCatalogSheet"
+import { InvoiceSummaryBar } from "@/components/editor/InvoiceSummaryBar"
 import {
   assertInvoiceDraftInvariant,
   buildPaymentQrString,
@@ -1929,16 +1931,20 @@ function App() {
           onExport={handleExportInvoice}
         />
       ) : null}
-      <MobileEditorActionBar
+      <InvoiceSummaryBar
         authReady={authReady}
         isSyncing={syncing}
-        lines={draft.lines}
-        onAddCustomLine={() => addLine(createEmptyLine())}
-        onExport={handleExportInvoice}
-        onRemoveLine={removeLine}
-        onSave={handleSaveInvoice}
-        onUpdateLine={updateLine}
+        lineCount={draft.lines.length}
         total={total}
+        onSave={handleSaveInvoice}
+        onExport={handleExportInvoice}
+        catalogTrigger={
+          <PriceCatalogSheet
+            lines={draft.lines}
+            onAddPriceItem={addPriceItem}
+            onRemovePriceItem={removePriceItem}
+          />
+        }
       />
     </AppShellV2>
   )
