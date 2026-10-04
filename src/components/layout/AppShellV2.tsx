@@ -4,13 +4,15 @@ import { BottomTabBar } from "@/components/layout/BottomTabBar"
 import { MobileHeader } from "@/components/layout/MobileHeader"
 import { cn } from "@/lib/utils"
 
-export type AppView = "dashboard" | "invoices" | "editor" | "bank"
+export type AppView = "dashboard" | "invoices" | "editor" | "bank" | "settings"
 
 type AppShellProps = {
   /** Currently active view/tab */
   activeView: AppView
   /** Switch to a different view */
   onViewChange: (view: AppView) => void
+  /** Start a new invoice (Nový tab action) */
+  onNewInvoice: () => void
   /** Page title shown in the mobile header */
   title: string
   /** Optional subtitle below the title */
@@ -19,10 +21,8 @@ type AppShellProps = {
   headerRight?: ReactNode
   /** Actions rendered on the left side of the header (e.g. back button) */
   headerLeft?: ReactNode
-  /** Invoice number currently being edited (shown on editor tab) */
-  invoiceNumber?: string
-  /** Whether the draft has unsaved changes */
-  hasUnsavedChanges?: boolean
+  /** Hide the mobile bottom tab bar (focused flows: editor, preview, catalog) */
+  hideTabBar?: boolean
   /** Main content */
   children: ReactNode
   /** Extra class names for the content wrapper */
@@ -39,12 +39,12 @@ type AppShellProps = {
 export function AppShellV2({
   activeView,
   onViewChange,
+  onNewInvoice,
   title,
   subtitle,
   headerRight,
   headerLeft,
-  invoiceNumber,
-  hasUnsavedChanges,
+  hideTabBar = false,
   children,
   className,
 }: AppShellProps) {
@@ -68,13 +68,14 @@ export function AppShellV2({
         {children}
       </main>
 
-      {/* iOS-style bottom tab bar – mobile only */}
-      <BottomTabBar
-        activeView={activeView}
-        onViewChange={(v) => onViewChange(v as AppView)}
-        invoiceNumber={invoiceNumber}
-        hasUnsavedChanges={hasUnsavedChanges}
-      />
+      {/* iOS-style bottom tab bar – mobile only, hidden during focused flows */}
+      {hideTabBar ? null : (
+        <BottomTabBar
+          activeView={activeView}
+          onViewChange={(v) => onViewChange(v as AppView)}
+          onNewInvoice={onNewInvoice}
+        />
+      )}
 
       <Toaster />
     </div>

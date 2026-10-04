@@ -249,7 +249,11 @@ export function createDefaultDraft(): InvoiceDraft {
   }
 }
 
-export function buildPaymentQrString(draft: InvoiceDraft, total: number) {
+export function buildPaymentQrString(
+  draft: InvoiceDraft,
+  total: number,
+  iban = payment.iban
+) {
   assertInvoiceDraftInvariant(draft, "payment QR draft")
   assertFiniteAmount(total, "payment QR total")
 
@@ -257,7 +261,7 @@ export function buildPaymentQrString(draft: InvoiceDraft, total: number) {
 
   return [
     "SPD*1.0",
-    `ACC:${payment.iban}`,
+    `ACC:${iban}`,
     `AM:${total.toFixed(2)}`,
     "CC:CZK",
     `X-VS:${sanitizeQrValue(draft.invoiceNumber)}`,
