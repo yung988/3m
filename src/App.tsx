@@ -693,7 +693,7 @@ function App() {
   }
 
   function handleViewChange(nextView: AppView) {
-    if (nextView === "settings") {
+    if (nextView === "settings" && view !== "settings") {
       setSettingsDraft(supplierSettings)
     }
     setView(nextView)
@@ -1063,6 +1063,15 @@ function App() {
         title: "Zkontroluj náhled",
         description:
           "Faktura je teď zobrazená přes celou obrazovku. Pokud sedí, klikni v náhledu na Export / PDF. Po odeslání firmě ji označ jako Odesláno.",
+      })
+      return
+    }
+
+    if (qrImage.value !== paymentQrString || !qrImage.url) {
+      notify({
+        title: "QR platba se připravuje",
+        description: "Počkej chvíli a export zopakuj, aby PDF obsahovalo aktuální účet.",
+        variant: "destructive",
       })
       return
     }
