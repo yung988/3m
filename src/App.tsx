@@ -38,6 +38,7 @@ import {
   RotateCcwIcon,
   SaveIcon,
   SearchIcon,
+  SettingsIcon,
   SendIcon,
   ShoppingCartIcon,
   Trash2Icon,
@@ -128,7 +129,6 @@ import {
   formatQuantity,
   normalizeMoneyInput,
   parseHoursInput,
-  payment,
   supplier,
   type InvoiceDraft,
   type InvoiceLine,
@@ -152,6 +152,11 @@ import {
   type InvoiceSummary,
 } from "@/lib/invoice-repository"
 import { missingSupabaseEnv, supabase } from "@/lib/supabase"
+import {
+  getSupplierSettings,
+  parseCzechAccountNumber,
+  type SupplierSettings,
+} from "@/lib/supplier-settings"
 
 function useScrollHide() {
   const [hidden, setHidden] = useState(false)
@@ -188,7 +193,7 @@ type AppMessage = {
   variant?: "default" | "destructive"
 }
 
-type AppView = "dashboard" | "editor"
+type AppView = "dashboard" | "editor" | "settings"
 
 type FilteredPriceItem = {
   item: PriceItem
@@ -341,7 +346,7 @@ function App() {
   const [draft, setDraft] = useState<InvoiceDraft>(() => readStoredDraft())
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [search, setSearch] = useState("")
-  const [qrDataUrl, setQrDataUrl] = useState("")
+  const [qrImage, setQrImage] = useState({ value: "", url: "" })
   const [session, setSession] = useState<Session | null>(null)
   const [authReady, setAuthReady] = useState(!supabase)
   const [authEmail, setAuthEmail] = useState("")
@@ -357,6 +362,10 @@ function App() {
   const [bankImportPreview, setBankImportPreview] =
     useState<BankImportPreview | null>(null)
   const [syncing, setSyncing] = useState(false)
+  const [settingsSaving, setSettingsSaving] = useState(false)
+  const [settingsDraft, setSettingsDraft] = useState<SupplierSettings>(() =>
+    getSupplierSettings(null)
+  )
   const [view, setView] = useState<AppView>("dashboard")
   const [previewVisible, setPreviewVisible] = useState(false)
   const [showExportIssues, setShowExportIssues] = useState(false)
@@ -370,11 +379,15 @@ function App() {
     [draft, total]
   )
   const user = session?.user ?? null
+  const supplierSettings = useMemo(
+    () => getSupplierSettings(user?.user_metadata),
+    [user?.user_metadata]
+  )
   const databaseIsConfigured = supabase !== null
   const exportFileName = useMemo(() => buildInvoicePdfFileName(draft), [draft])
   const paymentQrString = useMemo(
-    () => buildPaymentQrString(draft, total),
-    [draft, total]
+    () => buildPaymentQrString(draft, total, supplierSettings.iban),
+    [draft, total, supplierSettings.iban]
   )
 
   const filteredItems = useMemo<FilteredPriceItem[]>(() => {
@@ -534,12 +547,12 @@ function App() {
     })
       .then((url) => {
         if (isCurrent) {
-          setQrDataUrl(url)
+          setQrImage({ value: paymentQrString, url })
         }
       })
       .catch(() => {
         if (isCurrent) {
-          setQrDataUrl("")
+          setQrImage({ value: paymentQrString, url: "" })
         }
       })
 
@@ -697,6 +710,75 @@ function App() {
     })
   }
 
+  function handleOpenSettings() {
+    setSettingsDraft(supplierSettings)
+    setView("settings")
+  }
+
+  async function handleSaveSettings() {
+    if (!supabase || !user) return
+
+    const name = settingsDraft.name.trim()
+    const account = parseCzechAccountNumber(settingsDraft.accountNumber)
+    const bic = settingsDraft.bic.trim().toUpperCase()
+
+    if (!name || !account) {
+      notify({
+        title: "Zkontroluj nastavení",
+        description:
+          "Vyplň jméno dodavatele a platné české číslo účtu ve tvaru číslo/kód banky.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (bic && !/^[A-Z0-9]{8}([A-Z0-9]{3})?$/.test(bic)) {
+      notify({
+        title: "Zkontroluj BIC/SWIFT",
+        description: "BIC musí mít 8 nebo 11 znaků.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const nextSettings: SupplierSettings = {
+      name,
+      accountNumber: account.accountNumber,
+      iban: account.iban,
+      bank: settingsDraft.bank.trim(),
+      bic,
+    }
+
+    try {
+      setSettingsSaving(true)
+      const { data, error } = await supabase.auth.updateUser({
+        data: {
+          invoice_settings: {
+            name: nextSettings.name,
+            accountNumber: nextSettings.accountNumber,
+            bank: nextSettings.bank,
+            bic: nextSettings.bic,
+          },
+        },
+      })
+
+      if (error) throw error
+
+      setSession((current) =>
+        current ? { ...current, user: data.user } : current
+      )
+      setSettingsDraft(nextSettings)
+      notify({
+        title: "Nastavení uloženo",
+        description: "Nové údaje se použijí na fakturách a v platebním QR kódu.",
+      })
+    } catch (error) {
+      showError("Nastavení se nepodařilo uložit", error)
+    } finally {
+      setSettingsSaving(false)
+    }
+  }
+
   async function handleSaveInvoice() {
     if (!user) {
       notify({
@@ -822,7 +904,9 @@ function App() {
 
   async function handleCopyReminder(invoice: InvoiceSummary) {
     try {
-      await copyTextToClipboard(buildPaymentReminderText(invoice))
+      await copyTextToClipboard(
+        buildPaymentReminderText(invoice, supplierSettings.name)
+      )
     } catch (error) {
       showError("Kopírování upomínky selhalo", error)
       return
@@ -1000,6 +1084,15 @@ function App() {
       return
     }
 
+    if (qrImage.value !== paymentQrString || !qrImage.url) {
+      notify({
+        title: "QR platba se připravuje",
+        description: "Počkej chvíli a export zopakuj, aby PDF obsahovalo aktuální účet.",
+        variant: "destructive",
+      })
+      return
+    }
+
     if (!user) {
       notify({
         title: "Export bez databázového záznamu",
@@ -1099,6 +1192,14 @@ function App() {
         <span className="hidden sm:inline">Nová faktura</span>
         <span className="sm:hidden">Nová</span>
       </Button>
+      <Button
+        variant="outline"
+        size="icon"
+        aria-label="Nastavení dodavatele"
+        onClick={handleOpenSettings}
+      >
+        <SettingsIcon />
+      </Button>
       <Tooltip>
         <TooltipTrigger asChild>
           <Button variant="outline" size="icon" onClick={handleSignOut}>
@@ -1110,7 +1211,10 @@ function App() {
     </>
   ) : null
 
-  const reminderHref = buildReminderMailtoHrefForDraft(draft)
+  const reminderHref = buildReminderMailtoHrefForDraft(
+    draft,
+    supplierSettings.name
+  )
 
   const editorActions = user ? (
     <>
@@ -1175,6 +1279,10 @@ function App() {
               </DropdownMenuItem>
             )}
             <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleOpenSettings}>
+              <SettingsIcon />
+              Nastavení dodavatele
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={resetDraft}>
               <RotateCcwIcon />
               Reset faktury
@@ -1262,6 +1370,19 @@ function App() {
         </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label="Nastavení dodavatele"
+              onClick={handleOpenSettings}
+            >
+              <SettingsIcon />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Nastavení dodavatele</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
             <Button variant="outline" size="icon" onClick={handleSignOut}>
               <LogOutIcon />
             </Button>
@@ -1307,13 +1428,157 @@ function App() {
     )
   }
 
+  if (view === "settings") {
+    const accountPreview = parseCzechAccountNumber(settingsDraft.accountNumber)
+
+    return (
+      <AppShell
+        userEmail={user.email}
+        actions={
+          <Button variant="outline" onClick={() => setView("dashboard")}>
+            Zpět na přehled
+          </Button>
+        }
+      >
+        <main className="mx-auto max-w-2xl p-4 md:p-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Údaje na fakturách</CardTitle>
+              <CardDescription>
+                Uloží se k tvému přihlášenému účtu. Použijí se v náhledu,
+                nově exportovaných PDF a platebním QR kódu.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form
+                className="space-y-5"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  void handleSaveSettings()
+                }}
+              >
+                <Field>
+                  <FieldLabel htmlFor="supplier-name">Jméno dodavatele</FieldLabel>
+                  <Input
+                    id="supplier-name"
+                    autoComplete="name"
+                    value={settingsDraft.name}
+                    onChange={(event) =>
+                      setSettingsDraft((current) => ({
+                        ...current,
+                        name: event.target.value,
+                      }))
+                    }
+                    required
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="supplier-account">Číslo účtu</FieldLabel>
+                  <Input
+                    id="supplier-account"
+                    placeholder="123456789/3030"
+                    value={settingsDraft.accountNumber}
+                    onChange={(event) => {
+                      const value = event.target.value
+                      setSettingsDraft((current) => {
+                        const previous = parseCzechAccountNumber(
+                          supplierSettings.accountNumber
+                        )
+                        const next = parseCzechAccountNumber(value)
+                        const bankChanged =
+                          previous && next &&
+                          previous.bankCode !== next.bankCode
+
+                        return {
+                          ...current,
+                          accountNumber: value,
+                          iban: next?.iban ?? "",
+                          bank: bankChanged ? "" : current.bank,
+                          bic: bankChanged ? "" : current.bic,
+                        }
+                      })
+                    }}
+                    aria-invalid={
+                      settingsDraft.accountNumber.length > 0 && !accountPreview
+                    }
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    České číslo účtu včetně kódu banky. IBAN se dopočítá automaticky.
+                  </p>
+                  {settingsDraft.accountNumber && !accountPreview ? (
+                    <p className="text-xs text-destructive">
+                      Zadej platné číslo ve tvaru číslo/kód banky nebo předčíslí-číslo/kód banky.
+                    </p>
+                  ) : null}
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="supplier-iban">IBAN pro QR platbu</FieldLabel>
+                  <Input
+                    id="supplier-iban"
+                    value={accountPreview?.iban ?? ""}
+                    readOnly
+                  />
+                </Field>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field>
+                    <FieldLabel htmlFor="supplier-bank">Banka</FieldLabel>
+                    <Input
+                      id="supplier-bank"
+                      value={settingsDraft.bank}
+                      onChange={(event) =>
+                        setSettingsDraft((current) => ({
+                          ...current,
+                          bank: event.target.value,
+                        }))
+                      }
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="supplier-bic">BIC/SWIFT</FieldLabel>
+                    <Input
+                      id="supplier-bic"
+                      value={settingsDraft.bic}
+                      onChange={(event) =>
+                        setSettingsDraft((current) => ({
+                          ...current,
+                          bic: event.target.value,
+                        }))
+                      }
+                    />
+                  </Field>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Při změně banky doplň její název a BIC, pokud je chceš mít na faktuře.
+                </p>
+                <Button type="submit" disabled={settingsSaving}>
+                  <SaveIcon data-icon="inline-start" />
+                  {settingsSaving ? "Ukládám…" : "Uložit nastavení"}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </main>
+      </AppShell>
+    )
+  }
+
   if (view === "dashboard") {
     return (
       <AppShell actions={dashboardActions} userEmail={user.email}>
         <main className="mx-auto flex max-w-[1500px] flex-col gap-4 p-4 md:gap-5 md:p-6">
+          <Button
+            variant="outline"
+            className="self-start"
+            onClick={handleOpenSettings}
+          >
+            <SettingsIcon data-icon="inline-start" />
+            Nastavení dodavatele a účtu
+          </Button>
           <InvoiceStatsCard invoices={savedInvoices} />
           <InvoiceFollowUpCard
             invoices={savedInvoices}
+            supplierName={supplierSettings.name}
             isLoading={savedInvoicesLoading}
             isSyncing={syncing}
             onCopyReminder={handleCopyReminder}
@@ -1337,6 +1602,7 @@ function App() {
           <SavedInvoicesCard
             activeInvoiceId={draft.id}
             invoices={savedInvoices}
+            supplierName={supplierSettings.name}
             isLoading={savedInvoicesLoading}
             onDelete={handleDeleteInvoice}
             onDuplicate={handleDuplicateInvoice}
@@ -1834,7 +2100,8 @@ function App() {
           draft={draft}
           fileName={exportFileName}
           isExporting={syncing}
-          qrDataUrl={qrDataUrl}
+          qrDataUrl={qrImage.value === paymentQrString ? qrImage.url : ""}
+          supplierSettings={supplierSettings}
           total={total}
           onClose={() => setPreviewVisible(false)}
           onExport={handleExportInvoice}
@@ -2343,6 +2610,7 @@ function InvoiceStatsCard({ invoices }: { invoices: InvoiceSummary[] }) {
 
 function InvoiceFollowUpCard({
   invoices,
+  supplierName,
   isLoading,
   isSyncing,
   onCopyReminder,
@@ -2350,6 +2618,7 @@ function InvoiceFollowUpCard({
   onTogglePaid,
 }: {
   invoices: InvoiceSummary[]
+  supplierName: string
   isLoading: boolean
   isSyncing: boolean
   onCopyReminder: (invoice: InvoiceSummary) => void
@@ -2395,8 +2664,8 @@ function InvoiceFollowUpCard({
           <ul className="flex flex-col gap-2">
             {followUps.map(({ daysUntilDue, invoice, urgency }) => {
               const contactLine = formatInvoiceContactLine(invoice)
-              const mailtoHref = buildReminderMailtoHref(invoice)
-              const smsHref = buildReminderSmsHref(invoice)
+              const mailtoHref = buildReminderMailtoHref(invoice, supplierName)
+              const smsHref = buildReminderSmsHref(invoice, supplierName)
               const telHref = buildContactTelHref(invoice)
 
               return (
@@ -3334,6 +3603,7 @@ function SortHeader({
 function SavedInvoicesCard({
   activeInvoiceId,
   invoices,
+  supplierName,
   isLoading,
   onDelete,
   onDuplicate,
@@ -3343,6 +3613,7 @@ function SavedInvoicesCard({
 }: {
   activeInvoiceId?: string
   invoices: InvoiceSummary[]
+  supplierName: string
   isLoading: boolean
   onDelete: (id: string) => void
   onDuplicate: (id: string) => void
@@ -3777,7 +4048,7 @@ function SavedInvoicesCard({
                             <ContextMenuItem asChild>
                               <a
                                 href={
-                                  buildReminderMailtoHref(invoice) ?? undefined
+                                  buildReminderMailtoHref(invoice, supplierName) ?? undefined
                                 }
                               >
                                 <MailIcon className="size-4" />
@@ -3833,6 +4104,7 @@ function InvoicePreviewOverlay({
   onClose,
   onExport,
   qrDataUrl,
+  supplierSettings,
   total,
 }: {
   draft: InvoiceDraft
@@ -3841,6 +4113,7 @@ function InvoicePreviewOverlay({
   onClose: () => void
   onExport: () => void
   qrDataUrl: string
+  supplierSettings: SupplierSettings
   total: number
 }) {
   return (
@@ -3865,9 +4138,9 @@ function InvoicePreviewOverlay({
             <PrinterIcon data-icon="inline-start" />
             {isExporting ? "Exportuji" : "Export / PDF"}
           </Button>
-          {buildReminderMailtoHrefForDraft(draft) ? (
+          {buildReminderMailtoHrefForDraft(draft, supplierSettings.name) ? (
             <Button variant="outline" asChild>
-              <a href={buildReminderMailtoHrefForDraft(draft)!}>
+              <a href={buildReminderMailtoHrefForDraft(draft, supplierSettings.name)!}>
                 <MailIcon data-icon="inline-start" />
                 E-mail
               </a>
@@ -3881,7 +4154,12 @@ function InvoicePreviewOverlay({
         </div>
       </div>
       <div className="invoice-stage invoice-preview-stage">
-        <InvoiceDocument draft={draft} qrDataUrl={qrDataUrl} total={total} />
+        <InvoiceDocument
+          draft={draft}
+          qrDataUrl={qrDataUrl}
+          supplierSettings={supplierSettings}
+          total={total}
+        />
       </div>
     </section>
   )
@@ -3978,10 +4256,12 @@ function MobileEditorActionBar({
 function InvoiceDocument({
   draft,
   qrDataUrl,
+  supplierSettings,
   total,
 }: {
   draft: InvoiceDraft
   qrDataUrl: string
+  supplierSettings: SupplierSettings
   total: number
 }) {
   const customerAddress = draft.customerAddress
@@ -4007,7 +4287,7 @@ function InvoiceDocument({
             </div>
             <div>
               <dt>Číslo účtu:</dt>
-              <dd>{payment.accountNumber}</dd>
+              <dd>{supplierSettings.accountNumber}</dd>
             </div>
             <div>
               <dt>Variabilní symbol:</dt>
@@ -4023,17 +4303,21 @@ function InvoiceDocument({
             </div>
           </dl>
           <dl className="invoice-bank">
-            <div>
-              <dt>Banka:</dt>
-              <dd>{payment.bank}</dd>
-            </div>
-            <div>
-              <dt>BIC/SWIFT:</dt>
-              <dd>{payment.bic}</dd>
-            </div>
+            {supplierSettings.bank ? (
+              <div>
+                <dt>Banka:</dt>
+                <dd>{supplierSettings.bank}</dd>
+              </div>
+            ) : null}
+            {supplierSettings.bic ? (
+              <div>
+                <dt>BIC/SWIFT:</dt>
+                <dd>{supplierSettings.bic}</dd>
+              </div>
+            ) : null}
             <div>
               <dt>IBAN:</dt>
-              <dd>{payment.iban}</dd>
+              <dd>{supplierSettings.iban}</dd>
             </div>
           </dl>
         </div>
@@ -4049,7 +4333,7 @@ function InvoiceDocument({
       <section className="invoice-parties">
         <div>
           <h2>Dodavatel</h2>
-          <strong>{supplier.name}</strong>
+          <strong>{supplierSettings.name}</strong>
           {supplier.addressLines.map((line) => (
             <span key={line}>{line}</span>
           ))}
@@ -4313,7 +4597,7 @@ function formatDayUnit(count: number) {
   return "dní"
 }
 
-function buildPaymentReminderText(invoice: InvoiceSummary) {
+function buildPaymentReminderText(invoice: InvoiceSummary, supplierName: string) {
   const daysUntilDue = getInvoiceDaysUntilDue(invoice)
   const amount = formatCurrency(Number(invoice.total_amount) || 0)
   const project = [
@@ -4341,7 +4625,7 @@ function buildPaymentReminderText(invoice: InvoiceSummary) {
     "V evidenci ji mám zatím jako neuhrazenou. Prosím o kontrolu platby a případně o informaci, kdy bude odeslaná.",
     "",
     "Děkuji,",
-    supplier.name,
+    supplierName,
   ].join("\n")
 }
 
@@ -4355,7 +4639,7 @@ function formatInvoiceContactLine(invoice: InvoiceSummary) {
     .join(" · ")
 }
 
-function buildReminderMailtoHref(invoice: InvoiceSummary) {
+function buildReminderMailtoHref(invoice: InvoiceSummary, supplierName: string) {
   const email = invoice.contact_email.trim()
 
   if (!email) {
@@ -4363,12 +4647,15 @@ function buildReminderMailtoHref(invoice: InvoiceSummary) {
   }
 
   const subject = encodeURIComponent(buildReminderSubject(invoice))
-  const body = encodeURIComponent(buildPaymentReminderText(invoice))
+  const body = encodeURIComponent(buildPaymentReminderText(invoice, supplierName))
 
   return `mailto:${email}?subject=${subject}&body=${body}`
 }
 
-function buildReminderMailtoHrefForDraft(draft: InvoiceDraft): string | null {
+function buildReminderMailtoHrefForDraft(
+  draft: InvoiceDraft,
+  supplierName: string
+): string | null {
   if (!draft.contactEmail || !draft.id) {
     return null
   }
@@ -4391,17 +4678,17 @@ function buildReminderMailtoHrefForDraft(draft: InvoiceDraft): string | null {
     export_count: draft.exportCount,
     last_reminded_at: draft.lastRemindedAt,
     updated_at: "",
-  })
+  }, supplierName)
 }
 
-function buildReminderSmsHref(invoice: InvoiceSummary) {
+function buildReminderSmsHref(invoice: InvoiceSummary, supplierName: string) {
   const phone = normalizePhoneHref(invoice.contact_phone)
 
   if (!phone) {
     return null
   }
 
-  return `sms:${phone}?&body=${encodeURIComponent(buildPaymentReminderText(invoice))}`
+  return `sms:${phone}?&body=${encodeURIComponent(buildPaymentReminderText(invoice, supplierName))}`
 }
 
 function buildContactTelHref(invoice: InvoiceSummary) {
