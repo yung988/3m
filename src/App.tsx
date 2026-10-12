@@ -1569,7 +1569,7 @@ function App() {
         <main className="mx-auto flex max-w-[1500px] flex-col gap-4 p-4 md:gap-5 md:p-6">
           <Button
             variant="outline"
-            className="self-start"
+            className="min-h-11 w-full justify-start sm:w-auto sm:self-start"
             onClick={handleOpenSettings}
           >
             <SettingsIcon data-icon="inline-start" />
@@ -1618,6 +1618,14 @@ function App() {
   return (
     <AppShell actions={editorActions} userEmail={user.email}>
       <main className="mx-auto flex max-w-[1500px] flex-col gap-4 px-4 pt-4 pb-32 lg:pb-6">
+        <Button
+          variant="outline"
+          className="min-h-11 w-full justify-start lg:hidden"
+          onClick={handleOpenSettings}
+        >
+          <SettingsIcon data-icon="inline-start" />
+          Změnit jméno a číslo účtu
+        </Button>
         {/* Invoice form — DOM first so mobile shows it before the price list */}
         <Card className="app-panel no-print h-fit overflow-visible">
           <CardHeader>
