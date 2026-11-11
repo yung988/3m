@@ -1,0 +1,352 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-03T00:00:00.000Z",
+  "title": "Design System: 3m Faktury",
+  "extensions": {
+    "colorMeta": {
+      "system-blue": {
+        "role": "primary",
+        "displayName": "System Blue",
+        "canonical": "#007AFF",
+        "tonalRamp": [
+          "oklch(0.3 0.24 262)",
+          "oklch(0.38 0.24 262)",
+          "oklch(0.46 0.23 262)",
+          "oklch(0.55 0.22 262)",
+          "oklch(0.63 0.2 262)",
+          "oklch(0.72 0.16 262)",
+          "oklch(0.82 0.1 262)",
+          "oklch(0.92 0.045 262)"
+        ]
+      },
+      "system-blue-hover": {
+        "role": "primary",
+        "displayName": "System Blue (Hover)",
+        "canonical": "#0062CC",
+        "tonalRamp": []
+      },
+      "system-blue-pressed": {
+        "role": "primary",
+        "displayName": "System Blue (Pressed)",
+        "canonical": "#0052C2",
+        "tonalRamp": []
+      },
+      "system-gray-canvas": {
+        "role": "neutral",
+        "displayName": "System Gray Canvas",
+        "canonical": "#F2F2F7",
+        "tonalRamp": [
+          "oklch(0.35 0.011 92)",
+          "oklch(0.42 0.011 92)",
+          "oklch(0.5 0.011 92)",
+          "oklch(0.58 0.011 92)",
+          "oklch(0.66 0.011 92)",
+          "oklch(0.74 0.011 92)",
+          "oklch(0.85 0.011 92)",
+          "oklch(0.95 0.011 92)"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Surface White",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "oklch(0.9 0 0)",
+          "oklch(0.92 0 0)",
+          "oklch(0.94 0 0)",
+          "oklch(0.955 0 0)",
+          "oklch(0.97 0 0)",
+          "oklch(0.985 0 0)",
+          "oklch(0.995 0 0)",
+          "oklch(1 0 0)"
+        ]
+      },
+      "secondary-surface": {
+        "role": "neutral",
+        "displayName": "Secondary Grouped Surface",
+        "canonical": "#F7F7FA",
+        "tonalRamp": [
+          "oklch(0.35 0.006 260)",
+          "oklch(0.42 0.006 260)",
+          "oklch(0.5 0.006 260)",
+          "oklch(0.58 0.006 260)",
+          "oklch(0.66 0.006 260)",
+          "oklch(0.74 0.006 260)",
+          "oklch(0.85 0.006 260)",
+          "oklch(0.965 0.005 260)"
+        ]
+      },
+      "ink-primary": {
+        "role": "neutral",
+        "displayName": "Primary Ink",
+        "canonical": "#1C1C1E",
+        "tonalRamp": [
+          "oklch(0.17 0.004 270)",
+          "oklch(0.27 0.004 270)",
+          "oklch(0.37 0.004 270)",
+          "oklch(0.47 0.004 270)",
+          "oklch(0.57 0.004 270)",
+          "oklch(0.67 0.004 270)",
+          "oklch(0.78 0.004 270)",
+          "oklch(0.9 0.003 270)"
+        ]
+      },
+      "ink-secondary": {
+        "role": "neutral",
+        "displayName": "Secondary Ink",
+        "canonical": "#6E6E73",
+        "tonalRamp": []
+      },
+      "ink-tertiary": {
+        "role": "neutral",
+        "displayName": "Tertiary Ink",
+        "canonical": "#8E8E93",
+        "tonalRamp": []
+      },
+      "divider": {
+        "role": "neutral",
+        "displayName": "Divider",
+        "canonical": "rgba(60, 60, 67, 0.18)",
+        "tonalRamp": []
+      },
+      "success": {
+        "role": "semantic",
+        "displayName": "Success Green",
+        "canonical": "oklch(0.7 0.17 145)",
+        "tonalRamp": [
+          "oklch(0.35 0.17 145)",
+          "oklch(0.42 0.17 145)",
+          "oklch(0.49 0.17 145)",
+          "oklch(0.56 0.17 145)",
+          "oklch(0.63 0.17 145)",
+          "oklch(0.7 0.17 145)",
+          "oklch(0.8 0.12 145)",
+          "oklch(0.9 0.06 145)"
+        ]
+      },
+      "warning": {
+        "role": "semantic",
+        "displayName": "Warning Amber",
+        "canonical": "oklch(0.75 0.15 55)",
+        "tonalRamp": [
+          "oklch(0.4 0.15 55)",
+          "oklch(0.47 0.15 55)",
+          "oklch(0.54 0.15 55)",
+          "oklch(0.61 0.15 55)",
+          "oklch(0.68 0.15 55)",
+          "oklch(0.75 0.15 55)",
+          "oklch(0.83 0.11 55)",
+          "oklch(0.91 0.05 55)"
+        ]
+      },
+      "danger": {
+        "role": "semantic",
+        "displayName": "Danger Red",
+        "canonical": "oklch(0.6 0.2 25)",
+        "tonalRamp": [
+          "oklch(0.3 0.2 25)",
+          "oklch(0.37 0.2 25)",
+          "oklch(0.44 0.2 25)",
+          "oklch(0.51 0.2 25)",
+          "oklch(0.58 0.2 25)",
+          "oklch(0.6 0.2 25)",
+          "oklch(0.7 0.15 25)",
+          "oklch(0.8 0.09 25)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "large-title": {
+        "displayName": "Large Title",
+        "purpose": "Primary destination screens — Faktury and Platby. The one place the interface gets a big, decisive title."
+      },
+      "section-title": {
+        "displayName": "Section Title",
+        "purpose": "In-page section headings inside a screen."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Screen titles in compact flows, sheet titles."
+      },
+      "navigation-title": {
+        "displayName": "Navigation Title",
+        "purpose": "The title in focused editor and preview flows — a compact, native bar title."
+      },
+      "row-title": {
+        "displayName": "Row Title",
+        "purpose": "Invoice list rows and catalog item rows."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Buttons and emphasized amounts."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Inputs, form labels, item descriptions. Input text is always 16px to prevent iOS auto-zoom."
+      },
+      "secondary": {
+        "displayName": "Secondary",
+        "purpose": "Supporting copy, row subtitles, metadata."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Tab labels, uppercase + wider-tracking eyebrows."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "Status and due-date secondary row information."
+      }
+    },
+    "shadows": [
+      {
+        "name": "scrim-header",
+        "value": "background: rgba(242, 242, 247, 0.8); backdrop-filter: blur(24px)",
+        "purpose": "Translucent reading scrim behind the fixed header and bottom tab bar. The only retained 'lift' in the system; not a shadow."
+      }
+    ],
+    "motion": [
+      {
+        "name": "press",
+        "value": "transform: scale(0.98); transition: transform 0.15s ease",
+        "purpose": "Tap press feedback on buttons, tab-bar tabs, and invoice rows."
+      },
+      {
+        "name": "state",
+        "value": "transition: background-color 0.2s ease, border-color 0.2s ease",
+        "purpose": "Hover/focus color shifts on controls and pills."
+      }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "System Blue fill, white text, 44px; the single primary action on a screen (Uložit, Pokračovat, Přihlásit).",
+      "html": "<button class=\"ds-btn-primary\">Uložit</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 44px; padding: 0 20px; background: #007AFF; color: #ffffff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 16px; font-weight: 600; line-height: 1.4; border: none; border-radius: 10px; cursor: pointer; transition: background-color 0.2s ease, transform 0.15s ease; } .ds-btn-primary:hover { background: #0062CC; } .ds-btn-primary:focus-visible { outline: 2px solid rgba(0, 122, 255, 0.25); outline-offset: 2px; } .ds-btn-primary:active { background: #0052C2; transform: scale(0.98); } .ds-btn-primary:disabled { opacity: 0.5; cursor: default; }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Surface White with a Divider hairline; secondary and icon-only actions (Náhled, Zpět).",
+      "html": "<button class=\"ds-btn-outline\"><svg viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/></svg>Náhled</button>",
+      "css": ".ds-btn-outline { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 44px; padding: 0 16px; background: #ffffff; color: #1C1C1E; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 16px; font-weight: 600; line-height: 1.4; border: 1px solid rgba(60, 60, 67, 0.18); border-radius: 10px; cursor: pointer; transition: border-color 0.2s ease, transform 0.15s ease; } .ds-btn-outline:hover { border-color: rgba(60, 60, 67, 0.4); } .ds-btn-outline:focus-visible { outline: 2px solid rgba(0, 122, 255, 0.25); outline-offset: 2px; } .ds-btn-outline:active { transform: scale(0.98); } .ds-btn-outline:disabled { opacity: 0.5; cursor: default; }"
+    },
+    {
+      "name": "Search Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Catalog search on a Secondary Grouped Surface wash with leading icon and trailing clear button.",
+      "html": "<div class=\"ds-search\"><svg viewBox=\"0 0 24 24\" width=\"20\" height=\"20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"11\" cy=\"11\" r=\"7\"/><path d=\"m21 21-4.3-4.3\"/></svg><input type=\"text\" placeholder=\"Hledat položku…\" value=\"\" aria-label=\"Hledat položku\"/><button class=\"ds-clear\" aria-label=\"Vymazat\"><svg viewBox=\"0 0 24 24\" width=\"20\" height=\"20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M18 6 6 18M6 6l12 12\"/></svg></button></div>",
+      "css": ".ds-search { position: relative; display: flex; align-items: center; height: 48px; background: #F7F7FA; border: 1px solid transparent; border-radius: 10px; } .ds-search:focus-within { outline: 2px solid rgba(0, 122, 255, 0.25); outline-offset: 1px; } .ds-search svg:first-child { position: absolute; left: 14px; color: #8E8E93; pointer-events: none; } .ds-search input { flex: 1; height: 100%; padding: 0 48px 0 44px; background: transparent; color: #1C1C1E; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 16px; border: none; outline: none; } .ds-search input::placeholder { color: #8E8E93; } .ds-clear { display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; margin-right: 4px; background: transparent; color: #8E8E93; border: none; border-radius: 9999px; cursor: pointer; } .ds-clear:hover { color: #1C1C1E; }"
+    },
+    {
+      "name": "Status Chip",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "Pill status label on invoice rows; fill follows the semantic state (Zaplaceno / Rozpracováno / Po splatnosti).",
+      "html": "<span class=\"ds-chip ds-chip-paid\">Zaplaceno</span>",
+      "css": ".ds-chip { display: inline-flex; align-items: center; height: 32px; padding: 0 12px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 12px; font-weight: 600; line-height: 1.4; color: #ffffff; border-radius: 9999px; } .ds-chip-paid { background: oklch(0.7 0.17 145); } .ds-chip-draft { background: oklch(0.75 0.15 55); } .ds-chip-overdue { background: oklch(0.6 0.2 25); }"
+    },
+    {
+      "name": "Category Filter Chip",
+      "kind": "chip",
+      "refersTo": "chip-selected",
+      "description": "Catalog category pills; Secondary Grouped Surface at rest, System Blue fill when selected.",
+      "html": "<div class=\"ds-pills\"><button class=\"ds-pill\">Vše</button><button class=\"ds-pill ds-pill-selected\" aria-pressed=\"true\">FVE</button><button class=\"ds-pill\">Ostatní</button></div>",
+      "css": ".ds-pill { display: inline-flex; align-items: center; height: 32px; padding: 0 12px; background: #F7F7FA; color: #6E6E73; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 12px; font-weight: 600; line-height: 1.4; border: none; border-radius: 9999px; cursor: pointer; transition: background-color 0.2s ease, color 0.2s ease, transform 0.15s ease; } .ds-pill:hover { color: #1C1C1E; } .ds-pill:active { transform: scale(0.97); } .ds-pill-selected, .ds-pill-selected:hover { background: #007AFF; color: #ffffff; } .ds-pill:focus-visible { outline: 2px solid rgba(0, 122, 255, 0.25); outline-offset: 2px; }"
+    },
+    {
+      "name": "Invoice List Row",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Signature grouped-list row: shared container radius, hairline separators, amount + customer/job title primary, status + due date in Caption. Roughly five per phone viewport.",
+      "html": "<div class=\"ds-list\"><article class=\"ds-invoice-row\"><div class=\"ds-invoice-top\"><h3 class=\"ds-invoice-title\">FVE 9,9 kWp – 3M ENERGY</h3><strong class=\"ds-invoice-amount\">12 480 Kč</strong></div><div class=\"ds-invoice-bottom\"><span class=\"ds-chip ds-chip-paid\">Zaplaceno</span><span class=\"ds-invoice-date\">Splatnost: 3. 8. 2026</span></div></article><article class=\"ds-invoice-row\"><div class=\"ds-invoice-top\"><h3 class=\"ds-invoice-title\">Oprava rozvaděče – 3M ENERGY</h3><strong class=\"ds-invoice-amount\">3 900 Kč</strong></div><div class=\"ds-invoice-bottom\"><span class=\"ds-chip ds-chip-overdue\">Po splatnosti</span><span class=\"ds-invoice-date\">Splatnost: 28. 7. 2026</span></div></article></div>",
+      "css": ".ds-list { background: #ffffff; border-radius: 14px; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; } .ds-invoice-row { padding: 16px; background: #ffffff; cursor: pointer; transition: transform 0.15s ease; } .ds-invoice-row + .ds-invoice-row { border-top: 1px solid rgba(60, 60, 67, 0.18); } .ds-invoice-row:active { transform: scale(0.98); } .ds-invoice-top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; } .ds-invoice-title { margin: 0; font-size: 17px; font-weight: 600; line-height: 1.35; color: #1C1C1E; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .ds-invoice-amount { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; color: #1C1C1E; white-space: nowrap; } .ds-invoice-bottom { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; } .ds-invoice-date { font-size: 12px; font-weight: 500; line-height: 1.4; color: #8E8E93; }"
+    },
+    {
+      "name": "Bottom Tab Bar",
+      "kind": "nav",
+      "refersTo": "navigation",
+      "description": "Fixed 56px translucent tab bar, mobile only, with exactly three stable destinations: Faktury / Nová / Platby. Active tab is System Blue.",
+      "html": "<nav class=\"ds-tabbar\"><button class=\"ds-tab ds-tab-active\" aria-current=\"page\"><svg viewBox=\"0 0 24 24\" width=\"20\" height=\"20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z\"/><path d=\"M14 2v4a2 2 0 0 0 2 2h4\"/></svg><span>Faktury</span></button><button class=\"ds-tab\"><svg viewBox=\"0 0 24 24\" width=\"20\" height=\"20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M12 8v8M8 12h8\"/></svg><span>Nová</span></button><button class=\"ds-tab\"><svg viewBox=\"0 0 24 24\" width=\"20\" height=\"20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M3 21h18\"/><path d=\"M3 7v1a3 3 0 0 0 6 0V7\"/><path d=\"M9 7v1a3 3 0 0 0 6 0V7\"/><path d=\"M15 7v1a3 3 0 0 0 6 0V7\"/><path d=\"M3 10h18\"/><path d=\"M4 10v11\"/><path d=\"M20 10v11\"/><path d=\"M8 14v3\"/><path d=\"M16 14v3\"/></svg><span>Platby</span></button></nav>",
+      "css": ".ds-tabbar { display: flex; height: 56px; background: rgba(242, 242, 247, 0.8); -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px); border-top: 1px solid rgba(60, 60, 67, 0.18); padding-bottom: max(env(safe-area-inset-bottom), 4px); } .ds-tab { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 3px; background: transparent; color: #6E6E73; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 10px; font-weight: 500; line-height: 1; border: none; cursor: pointer; transition: transform 0.15s ease, color 0.2s ease; } .ds-tab:hover { color: #1C1C1E; } .ds-tab:active { transform: scale(0.95); } .ds-tab-active, .ds-tab-active:hover { color: #007AFF; } .ds-tab:focus-visible { outline: 2px solid rgba(0, 122, 255, 0.25); outline-offset: -2px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Quiet Native Utility",
+    "overview": "A light, iOS-inspired invoicing interface that feels calm, immediate and effortless to operate. Hierarchy comes from typography, spacing and the contrast between the System Gray canvas and white grouped surfaces — not from decorative cards, gradients or heavy borders. The interface should feel like a focused native productivity tool: compact, predictable, highly legible and optimized for fast one-handed use on a phone in the field.\n\nThis is a single-user tool for one electrician (Štěpán) who builds FVE systems and invoices from a price catalog while on site. Every screen is built for a thumb, sunlight, and speed: minimal taps between 'idea' and 'PDF sent'. The system is quiet on purpose — the data (amounts, dates, statuses) is the loud thing, so it gets the type weight, the tabular numerals, and the only color that matters at the moment a decision is made. Czech is the only language; CZK is the only supported currency; dates, quantities and invoice numbers follow their documented Czech formats.\n\nSystem Blue is the one interaction color and it is used sparingly — on the primary action of a screen, the active tab, a selected control, a link. Everything else is ink on the gray canvas and white surfaces, with subtle hairlines doing the separating. The printed A4 invoice stays a clean, monochrome-leaning document; the incumbent lime print accents are part of the legacy sheet and are pending migration.",
+    "keyCharacteristics": [
+      "Light System Gray canvas with white grouped surfaces; hierarchy from type + spacing, not cards.",
+      "System Blue reserved for interaction; green exists only as the semantic paid/success state.",
+      "Three stable tab-bar destinations — Faktury, Nová, Platby; focused flows (editor, preview, catalog) hide the tab bar.",
+      "Invoices render as compact grouped-list rows — roughly five per phone viewport — with hairline separators.",
+      "Compact density, 44px minimum touch targets, 16px input text.",
+      "Flat at rest; no decorative shadows, gradients, or glass panels.",
+      "Mobile-first, safe-area-aware, one-handed thumb-reach layout.",
+      "Czech-only UI copy; tabular numerals for all money."
+    ],
+    "rules": [
+      {
+        "name": "The System Blue Rule",
+        "body": "Blue touches only things you can press or select: primary actions, the active tab, selected pills, links, focus rings. It never fills large surfaces; on any given screen it should cover well under 10% of the pixels. Its rarity is the point — the eye lands on the next tap.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Green Rule",
+        "body": "Green is a status, not a brand. The only legal green is the success/paid semantic; any gradient, glow, or lime accent on the canvas is legacy and forbidden on new surfaces.",
+        "section": "colors"
+      },
+      {
+        "name": "The System-Font Rule",
+        "body": "The operating system's native UI font is the only typeface. No webfont is loaded and no second family is ever added; hierarchy comes from weight and size. Geist Variable belongs to the legacy implementation being replaced and must not reappear.",
+        "section": "typography"
+      },
+      {
+        "name": "The Title-of-Place Rule",
+        "body": "Large Title is reserved for primary destination screens such as Faktury and Platby. Focused editor and preview flows use the compact Navigation Title instead — a large title inside a focused flow would mislead the user about where they are.",
+        "section": "typography"
+      },
+      {
+        "name": "The Three-Destination Rule",
+        "body": "The mobile tab bar holds exactly three stable destinations — Faktury, Nová, Platby — and Faktury is the default authenticated destination. The former dashboard lives inside Faktury as a compact summary. The invoice editor, preview and catalog are flows launched from those destinations, never additional tabs. An invoice number is never used as a navigation label.",
+        "section": "layout"
+      },
+      {
+        "name": "The Quiet-At-Rest Rule",
+        "body": "Surfaces are flat at rest; the only depth cue is canvas-vs-white contrast plus hairlines. Shadows, glows, and glass panels are the signature of the legacy cockpit design and are the first thing a migration removes.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do keep the canvas System Gray and grouped content Surface White; the gray/white contrast is the hierarchy.",
+      "Do reserve System Blue for interactive states only — primary action, active tab, selected pill, focus ring.",
+      "Do keep the mobile tab bar to the three stable destinations — Faktury, Nová, Platby — with Faktury as the default authenticated destination.",
+      "Do hide the bottom navigation during focused flows (editor, preview, catalog) and return to Faktury via a back/cancel affordance.",
+      "Do build lists as compact grouped rows — one shared container radius, 1px hairline separators between rows, roughly five invoice rows per phone viewport.",
+      "Do use an inline plus control (or compact stepper) for adding catalog items, backed by a persistent summary with Pokračovat.",
+      "Do use 44px minimum touch targets and 16px input text on mobile.",
+      "Do pad all fixed chrome (header, tab bar, summary bar, catalog surface) with env(safe-area-inset-*).",
+      "Do render money and quantities with tabular-nums and Czech formatting.",
+      "Do keep every user-facing string in Czech."
+    ],
+    "donts": [
+      "Don't use green or lime as a primary interaction or brand accent — the green cockpit gradient, glass panels, card shadows, the bottom-sheet catalog, and the Geist webfont are anti-reference, not allowed design rules.",
+      "Don't make the editor, preview, or catalog persistent tab-bar destinations, and never use an invoice number as a navigation label.",
+      "Don't render invoices as standalone cards with thick colored side strips, nested cards, per-row shadows, or per-row radii.",
+      "Don't use a full-width 'Přidat' button inside every catalog row — inline plus / stepper only.",
+      "Don't add decorative gradients, colored glows, or backdrop-blur glass panels to new surfaces.",
+      "Don't float white cards on a white background; there is always a gray canvas beneath grouped surfaces.",
+      "Don't use shadows for depth — separate with canvas tone and hairline dividers.",
+      "Don't mix radii arbitrarily; pick the token level for the element's rank.",
+      "Don't load a webfont or add a second typeface — the OS native UI font is the only typeface — and don't drop tabular numerals for money."
+    ]
+  }
+}
