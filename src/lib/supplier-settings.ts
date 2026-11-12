@@ -1,7 +1,10 @@
-import { payment, supplier } from "@/lib/invoice"
-
 export type SupplierSettings = {
   name: string
+  addressLines: string[]
+  companyId: string
+  vatNote: string
+  email: string
+  phone: string
   accountNumber: string
   iban: string
   bank: string
@@ -9,11 +12,16 @@ export type SupplierSettings = {
 }
 
 export const defaultSupplierSettings: SupplierSettings = {
-  name: supplier.name,
-  accountNumber: payment.accountNumber,
-  iban: payment.iban,
-  bank: payment.bank,
-  bic: payment.bic,
+  name: "",
+  addressLines: [],
+  companyId: "",
+  vatNote: "",
+  email: "",
+  phone: "",
+  accountNumber: "",
+  iban: "",
+  bank: "",
+  bic: "",
 }
 
 export function parseCzechAccountNumber(value: string) {
@@ -33,8 +41,7 @@ export function parseCzechAccountNumber(value: string) {
     return null
   }
 
-  const bban =
-    bankCode + prefixDigits + numberDigits
+  const bban = bankCode + prefixDigits + numberDigits
   const checkDigits = String(98n - (BigInt(`${bban}123500`) % 97n)).padStart(
     2,
     "0"
@@ -52,7 +59,9 @@ function hasValidModulo11(digits: string, weights: number[]) {
     [...digits].reduce(
       (sum, digit, index) => sum + Number(digit) * weights[index],
       0
-    ) % 11 === 0
+    ) %
+      11 ===
+    0
   )
 }
 
@@ -62,24 +71,48 @@ export function getSupplierSettings(metadata: unknown): SupplierSettings {
       ? metadata.invoice_settings
       : null
 
-  if (!value || typeof value !== "object") return defaultSupplierSettings
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { ...defaultSupplierSettings, addressLines: [] }
+  }
 
   const saved = value as Record<string, unknown>
-  const account =
-    typeof saved.accountNumber === "string"
-      ? parseCzechAccountNumber(saved.accountNumber)
-      : null
-
-  if (!account) return defaultSupplierSettings
+  const text = (key: string) =>
+    typeof saved[key] === "string" ? saved[key].trim() : ""
+  const account = parseCzechAccountNumber(text("accountNumber"))
 
   return {
-    name:
-      typeof saved.name === "string" && saved.name.trim()
-        ? saved.name.trim()
-        : supplier.name,
-    accountNumber: account.accountNumber,
-    iban: account.iban,
-    bank: typeof saved.bank === "string" ? saved.bank.trim() : "",
-    bic: typeof saved.bic === "string" ? saved.bic.trim() : "",
+    name: text("name"),
+    addressLines: Array.isArray(saved.addressLines)
+      ? saved.addressLines
+          .filter((line): line is string => typeof line === "string")
+          .map((line) => line.trim())
+          .filter(Boolean)
+      : [],
+    companyId: text("companyId"),
+    vatNote: text("vatNote"),
+    email: text("email"),
+    phone: text("phone"),
+    accountNumber: text("accountNumber"),
+    iban: account?.iban ?? "",
+    bank: text("bank"),
+    bic: text("bic"),
   }
+}
+
+export function getSupplierValidationIssues(
+  settings: SupplierSettings
+): string[] {
+  const issues: string[] = []
+  if (!settings.name.trim()) issues.push("Vyplň jméno dodavatele.")
+  if (!settings.addressLines.some((line) => line.trim()))
+    issues.push("Vyplň adresu dodavatele.")
+  if (!/^\d{8}$/.test(settings.companyId.trim()))
+    issues.push("IČO musí mít 8 číslic.")
+  if (!parseCzechAccountNumber(settings.accountNumber))
+    issues.push("Vyplň platné české číslo účtu.")
+  if (settings.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(settings.email))
+    issues.push("Zkontroluj e-mail dodavatele.")
+  if (settings.bic && !/^[A-Z0-9]{8}([A-Z0-9]{3})?$/.test(settings.bic))
+    issues.push("BIC musí mít 8 nebo 11 znaků.")
+  return issues
 }

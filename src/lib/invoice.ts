@@ -45,22 +45,6 @@ export type InvoiceDraft = {
   lines: InvoiceLine[]
 }
 
-export const supplier = {
-  name: "Štěpán Smutný",
-  addressLines: ["Doubravník 288", "59261 Doubravník", "Česká republika"],
-  companyId: "17303940",
-  vatNote: "Nejsem plátce DPH.",
-  email: "stepansmutny@gmail.com",
-  phone: "+420 606 087 779",
-}
-
-export const payment = {
-  accountNumber: "2991647014/3030",
-  iban: "CZ4430300000002991647014",
-  bic: "AIRACZPP",
-  bank: "Air Bank a.s., Evropská 2690/17, 160 00 Praha 6",
-}
-
 const currencyFormatter = new Intl.NumberFormat("cs-CZ", {
   style: "currency",
   currency: "CZK",
@@ -252,7 +236,7 @@ export function createDefaultDraft(): InvoiceDraft {
 export function buildPaymentQrString(
   draft: InvoiceDraft,
   total: number,
-  iban = payment.iban
+  iban: string
 ) {
   assertInvoiceDraftInvariant(draft, "payment QR draft")
   assertFiniteAmount(total, "payment QR total")

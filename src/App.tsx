@@ -129,7 +129,6 @@ import {
   formatQuantity,
   normalizeMoneyInput,
   parseHoursInput,
-  supplier,
   type InvoiceDraft,
   type InvoiceLine,
   type InvoiceStatus,
@@ -154,6 +153,7 @@ import {
 import { missingSupabaseEnv, supabase } from "@/lib/supabase"
 import {
   getSupplierSettings,
+  getSupplierValidationIssues,
   parseCzechAccountNumber,
   type SupplierSettings,
 } from "@/lib/supplier-settings"
@@ -386,7 +386,7 @@ function App() {
   const databaseIsConfigured = supabase !== null
   const exportFileName = useMemo(() => buildInvoicePdfFileName(draft), [draft])
   const paymentQrString = useMemo(
-    () => buildPaymentQrString(draft, total, supplierSettings.iban),
+    () => supplierSettings.iban ? buildPaymentQrString(draft, total, supplierSettings.iban) : "",
     [draft, total, supplierSettings.iban]
   )
 
@@ -501,12 +501,13 @@ function App() {
 
     let isMounted = true
 
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(async ({ data }) => {
+      const profile = data.session && supabase ? await supabase.auth.getUser() : null
       if (!isMounted) {
         return
       }
 
-      setSession(data.session)
+      setSession(data.session && profile?.data.user ? { ...data.session, user: profile.data.user } : data.session)
       setAuthReady(true)
     })
 
@@ -539,6 +540,8 @@ function App() {
 
   useEffect(() => {
     let isCurrent = true
+
+    if (!paymentQrString) return
 
     QRCode.toDataURL(paymentQrString, {
       errorCorrectionLevel: "M",
@@ -722,43 +725,30 @@ function App() {
     const account = parseCzechAccountNumber(settingsDraft.accountNumber)
     const bic = settingsDraft.bic.trim().toUpperCase()
 
-    if (!name || !account) {
-      notify({
-        title: "Zkontroluj nastavení",
-        description:
-          "Vyplň jméno dodavatele a platné české číslo účtu ve tvaru číslo/kód banky.",
-        variant: "destructive",
-      })
-      return
-    }
-
-    if (bic && !/^[A-Z0-9]{8}([A-Z0-9]{3})?$/.test(bic)) {
-      notify({
-        title: "Zkontroluj BIC/SWIFT",
-        description: "BIC musí mít 8 nebo 11 znaků.",
-        variant: "destructive",
-      })
-      return
-    }
-
     const nextSettings: SupplierSettings = {
+      ...settingsDraft,
       name,
-      accountNumber: account.accountNumber,
-      iban: account.iban,
+      addressLines: settingsDraft.addressLines.map((line) => line.trim()).filter(Boolean),
+      companyId: settingsDraft.companyId.trim(),
+      vatNote: settingsDraft.vatNote.trim(),
+      email: settingsDraft.email.trim(),
+      phone: settingsDraft.phone.trim(),
+      accountNumber: account?.accountNumber ?? settingsDraft.accountNumber,
+      iban: account?.iban ?? "",
       bank: settingsDraft.bank.trim(),
       bic,
+    }
+    const issues = getSupplierValidationIssues(nextSettings)
+    if (issues.length > 0) {
+      notify({ title: "Zkontroluj nastavení", description: issues.join(" "), variant: "destructive" })
+      return
     }
 
     try {
       setSettingsSaving(true)
       const { data, error } = await supabase.auth.updateUser({
         data: {
-          invoice_settings: {
-            name: nextSettings.name,
-            accountNumber: nextSettings.accountNumber,
-            bank: nextSettings.bank,
-            bic: nextSettings.bic,
-          },
+          invoice_settings: nextSettings,
         },
       })
 
@@ -1061,6 +1051,18 @@ function App() {
   }
 
   async function handleExportInvoice() {
+    const supplierIssues = getSupplierValidationIssues(supplierSettings)
+    if (supplierIssues.length > 0) {
+      setPreviewVisible(false)
+      handleOpenSettings()
+      notify({
+        title: "Doplň údaje dodavatele",
+        description: supplierIssues.join(" "),
+        variant: "destructive",
+      })
+      return
+    }
+
     if (invoiceValidationIssues.length > 0) {
       setPreviewVisible(false)
       setShowExportIssues(true)
@@ -1445,7 +1447,7 @@ function App() {
             <CardHeader>
               <CardTitle>Údaje na fakturách</CardTitle>
               <CardDescription>
-                Uloží se k tvému přihlášenému účtu. Použijí se v náhledu,
+                Všechny údaje dodavatele se uloží k tvému účtu v Supabase. Použijí se v náhledu,
                 nově exportovaných PDF a platebním QR kódu.
               </CardDescription>
             </CardHeader>
@@ -1472,6 +1474,60 @@ function App() {
                     required
                   />
                 </Field>
+                <Field>
+                  <FieldLabel htmlFor="supplier-address">Adresa dodavatele</FieldLabel>
+                  <Textarea
+                    id="supplier-address"
+                    value={settingsDraft.addressLines.join("\n")}
+                    onChange={(event) => setSettingsDraft((current) => ({ ...current, addressLines: event.target.value.split("\n") }))}
+                    placeholder={"Ulice a číslo\nPSČ a obec\nZemě"}
+                    rows={3}
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground">Každý řádek se stejně zobrazí na faktuře.</p>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="supplier-company-id">IČO</FieldLabel>
+                  <Input
+                    id="supplier-company-id"
+                    inputMode="numeric"
+                    pattern="[0-9]{8}"
+                    maxLength={8}
+                    value={settingsDraft.companyId}
+                    onChange={(event) => setSettingsDraft((current) => ({ ...current, companyId: event.target.value }))}
+                    required
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="supplier-vat-note">Poznámka o DPH</FieldLabel>
+                  <Input
+                    id="supplier-vat-note"
+                    value={settingsDraft.vatNote}
+                    onChange={(event) => setSettingsDraft((current) => ({ ...current, vatNote: event.target.value }))}
+                  />
+                </Field>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field>
+                    <FieldLabel htmlFor="supplier-email">Kontaktní e-mail</FieldLabel>
+                    <Input
+                      id="supplier-email"
+                      type="email"
+                      autoComplete="email"
+                      value={settingsDraft.email}
+                      onChange={(event) => setSettingsDraft((current) => ({ ...current, email: event.target.value }))}
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="supplier-phone">Telefon</FieldLabel>
+                    <Input
+                      id="supplier-phone"
+                      type="tel"
+                      autoComplete="tel"
+                      value={settingsDraft.phone}
+                      onChange={(event) => setSettingsDraft((current) => ({ ...current, phone: event.target.value }))}
+                    />
+                  </Field>
+                </div>
                 <Field>
                   <FieldLabel htmlFor="supplier-account">Číslo účtu</FieldLabel>
                   <Input
@@ -4342,13 +4398,13 @@ function InvoiceDocument({
         <div>
           <h2>Dodavatel</h2>
           <strong>{supplierSettings.name}</strong>
-          {supplier.addressLines.map((line) => (
+          {supplierSettings.addressLines.map((line) => (
             <span key={line}>{line}</span>
           ))}
           <p>
-            IČO: {supplier.companyId}
+            IČO: {supplierSettings.companyId}
             <br />
-            {supplier.vatNote}
+            {supplierSettings.vatNote}
           </p>
         </div>
         <div>
@@ -4407,9 +4463,9 @@ function InvoiceDocument({
       <footer className="invoice-footer">
         <span>Strana 1 / 1</span>
         <strong>
-          {supplier.email}
+          {supplierSettings.email}
           <br />
-          {supplier.phone}
+          {supplierSettings.phone}
         </strong>
       </footer>
     </article>
