@@ -47,6 +47,8 @@ import {
   XIcon,
 } from "lucide-react"
 
+import { InvoiceDocument } from "@/components/invoice-document"
+
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -1082,6 +1084,15 @@ function App() {
         title: "Zkontroluj náhled",
         description:
           "Faktura je teď zobrazená přes celou obrazovku. Pokud sedí, klikni v náhledu na Export / PDF. Po odeslání firmě ji označ jako Odesláno.",
+      })
+      return
+    }
+
+    if (document.getElementById("invoice-print")?.dataset.pagination !== "ready") {
+      notify({
+        title: "Fakturu zatím nejde exportovat",
+        description: "Počkej na přípravu stránek. Pokud náhled hlásí příliš dlouhé údaje, zkrať je a export zopakuj.",
+        variant: "destructive",
       })
       return
     }
@@ -4317,160 +4328,6 @@ function MobileEditorActionBar({
   )
 }
 
-function InvoiceDocument({
-  draft,
-  qrDataUrl,
-  supplierSettings,
-  total,
-}: {
-  draft: InvoiceDraft
-  qrDataUrl: string
-  supplierSettings: SupplierSettings
-  total: number
-}) {
-  const customerAddress = draft.customerAddress
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-
-  return (
-    <article id="invoice-print" className="invoice-sheet">
-      <header className="invoice-top">
-        <span>FAKTURA</span>
-        <strong>{draft.invoiceNumber}</strong>
-      </header>
-
-      <section className="invoice-payment">
-        <div className="invoice-payment-copy">
-          <span>Prosím o zaplacení</span>
-          <strong>{formatCurrency(total)}</strong>
-          <dl>
-            <div>
-              <dt>Forma úhrady:</dt>
-              <dd>bankovním převodem</dd>
-            </div>
-            <div>
-              <dt>Číslo účtu:</dt>
-              <dd>{supplierSettings.accountNumber}</dd>
-            </div>
-            <div>
-              <dt>Variabilní symbol:</dt>
-              <dd>{draft.invoiceNumber}</dd>
-            </div>
-            <div>
-              <dt>Datum vystavení:</dt>
-              <dd>{formatDate(draft.issueDate)}</dd>
-            </div>
-            <div>
-              <dt>Datum splatnosti:</dt>
-              <dd>{formatDate(draft.dueDate)}</dd>
-            </div>
-          </dl>
-          <dl className="invoice-bank">
-            {supplierSettings.bank ? (
-              <div>
-                <dt>Banka:</dt>
-                <dd>{supplierSettings.bank}</dd>
-              </div>
-            ) : null}
-            {supplierSettings.bic ? (
-              <div>
-                <dt>BIC/SWIFT:</dt>
-                <dd>{supplierSettings.bic}</dd>
-              </div>
-            ) : null}
-            <div>
-              <dt>IBAN:</dt>
-              <dd>{supplierSettings.iban}</dd>
-            </div>
-          </dl>
-        </div>
-        <div className="invoice-qr">
-          {qrDataUrl ? (
-            <img src={qrDataUrl} alt="QR platba" />
-          ) : (
-            <span>QR</span>
-          )}
-        </div>
-      </section>
-
-      <section className="invoice-parties">
-        <div>
-          <h2>Dodavatel</h2>
-          <strong>{supplierSettings.name}</strong>
-          {supplierSettings.addressLines.map((line) => (
-            <span key={line}>{line}</span>
-          ))}
-          <p>
-            IČO: {supplierSettings.companyId}
-            <br />
-            {supplierSettings.vatNote}
-          </p>
-        </div>
-        <div>
-          <h2>Odběratel</h2>
-          <strong>{draft.customerName}</strong>
-          {draft.contactName && <span>{draft.contactName}</span>}
-          {customerAddress.map((line) => (
-            <span key={line}>{line}</span>
-          ))}
-          {(draft.customerCompanyId || draft.customerTaxId) && (
-            <p>
-              {draft.customerCompanyId && `IČO: ${draft.customerCompanyId}`}
-              {draft.customerCompanyId && draft.customerTaxId && <br />}
-              {draft.customerTaxId && `DIČ: ${draft.customerTaxId}`}
-            </p>
-          )}
-        </div>
-      </section>
-
-      <p className="invoice-legal">
-        Úřad příslušný podle § 71 odst. 2 živnostenského zákona: Fyzická osoba
-        podnikající dle živnostenského zákona.
-      </p>
-
-      <section className="invoice-items">
-        <h2>
-          Fakturuji Vám za {draft.projectTitle}
-          {draft.projectSubtitle ? ` (${draft.projectSubtitle})` : ""}
-        </h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Popis</th>
-              <th>Množství</th>
-              <th>Za jednotku</th>
-              <th>Celkem</th>
-            </tr>
-          </thead>
-          <tbody>
-            {draft.lines.map((line) => (
-              <tr key={line.id}>
-                <td>{line.description}</td>
-                <td>{formatQuantity(line.quantity, line.unitLabel)}</td>
-                <td>{formatCurrency(line.unitPrice)}</td>
-                <td>{formatCurrency(line.quantity * line.unitPrice)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <div className="invoice-total">
-          <span>Celkem zaplaťte:</span>
-          <strong>{formatCurrency(total)}</strong>
-        </div>
-      </section>
-
-      <footer className="invoice-footer">
-        <span>Strana 1 / 1</span>
-        <strong>
-          {supplierSettings.email}
-          <br />
-          {supplierSettings.phone}
-        </strong>
-      </footer>
-    </article>
-  )
-}
 
 function printInvoicePdf(draft: InvoiceDraft) {
   const previousTitle = document.title

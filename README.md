@@ -23,3 +23,25 @@ Aplikace nemá pevně nastaveného dodavatele ani výchozí bankovní účet. P�
 vyžaduje jméno, adresu, osmimístné IČO a platný český účet. Starší neúplné profily
 je potřeba doplnit. Změna profilu se projeví také při novém exportu starší faktury;
 samostatná historická kopie dodavatele u faktury se neukládá.
+
+## Stránkování PDF
+
+Náhled i tisk používají stejné stránky A4. Aplikace po načtení fontů změří skutečné
+výšky obsahu a rozdělí položky mezi stránky. Na pokračování zopakuje číslo faktury,
+název zakázky a hlavičku tabulky; součet je pouze na poslední straně. Běžné položky
+zůstávají celé. Pokud je samotný popis delší než celá A4, pokračuje na dalších
+stranách a množství i ceny se zobrazí jen jednou. Záhlaví, které by samo přesáhlo
+A4, zobrazí chybu a export zablokuje.
+
+PDF nadále vzniká přes tiskový dialog prohlížeče. Při ukládání použij formát A4,
+měřítko 100 % a vypnutá záhlaví a zápatí prohlížeče.
+
+Regresní testy skutečného rozložení a PDF v Chromiu:
+
+```bash
+bunx --bun playwright install chromium
+bun run test:browser
+```
+
+Testy spouštějí vlastní lokální Vite server a pracují se syntetickými daty bez
+připojení k Supabase. Výstupní PDF jsou v ignorovaném adresáři `test-results/`.
